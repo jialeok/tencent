@@ -297,9 +297,10 @@ async function startRecording() {
 
   const cfg = getConfig();
   const params = new URLSearchParams({
-    engine:      cfg.engine,
-    needvad:     cfg.vad    ? '1' : '0',
-    filter_punc: cfg.punc   ? '1' : '0',
+    engine:       cfg.engine,
+    needvad:      cfg.vad    ? '1' : '0',
+    filter_punc:  cfg.punc   ? '1' : '0',
+    voice_format: '1',   // 1 = 裸 PCM（默认是4=speex，不传会导致解码失败）
   });
   const wsUrl = `${PROXY_WS_URL}?${params}`;
 
@@ -314,7 +315,20 @@ async function startRecording() {
   ws.onmessage = (e) => {
     // 忽略二进制帧（腾讯偶尔发送的心跳/确认包）
     if (e.data instanceof ArrayBuffer || e.data instanceof Blob) {
-      log(`[WS] 收到二进制帧 ${e.data.byteLength ?? '?'} bytes（忽略）`, 'info');
+      // 尝试解析为文本（腾讯 ASR 偶尔把 JSON 错误以 binary 帧发送）
+      const tryDecode = async () => {
+        try {
+          const buf = e.data instanceof Blob ? await e.data.arrayBuffer() : e.data;
+          const text = new TextDecoder().decode(buf);
+          if (text.startsWith('{')) {
+            log(`[WS] 二进制帧解码为JSON: ${text.slice(0, 200)}`, 'err');
+            try { handleAsrMessage(JSON.parse(text)); } catch(_) {}
+          } else {
+            log(`[WS] 收到二进制帧 ${buf.byteLength} bytes（非JSON，忽略）`, 'info');
+          }
+        } catch(_) {}
+      };
+      tryDecode();
       return;
     }
     log(`[WS] 收到文本: ${e.data.slice(0, 120)}`, 'info');
@@ -362,15 +376,19 @@ async function startRecording() {
   log('[AUDIO] 启动静音 keep-alive（等待上游就绪期间）', 'info');
   const silenceChunk = new Int16Array(CHUNK_SAMPLES); // 全零 = 静音
   silenceInterval = setInterval(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    // WS 还在握手中（CONNECTING）— 等待，不发也不停
+    if (ws && ws.readyState === WebSocket.CONNECTING) return;
+    // WS 已关闭 — 停止 keep-alive
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
       _stopSilenceKeepAlive();
       return;
     }
+    // 麦克风已就绪，sendInterval 接管，停止静音帧
     if (micReady) {
-      // 麦克风已就绪，停止静音帧（由 sendInterval 接管）
       _stopSilenceKeepAlive();
       return;
     }
+    // WS OPEN 且麦克风未就绪 — 发静音保活
     ws.send(silenceChunk.buffer.slice(0));
   }, PCM_CHUNK_MS);
 }
@@ -427,6 +445,18 @@ async function startMic() {
 
   source.connect(scriptProcessor);
   scriptProcessor.connect(audioCtx.destination);
+
+  // 检查：麦克风就绪时 WS 是否还活着（可能在 getUserMedia 等待期间已关闭）
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log(`[MIC] WS 已关闭（readyState=${ws?.readyState ?? 'null'}），中止录音`, 'err');
+    // 清理麦克风资源
+    clearInterval(sendInterval); sendInterval = null;
+    mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null;
+    scriptProcessor.disconnect(); scriptProcessor = null;
+    audioCtx.close(); audioCtx = null;
+    finishRecording();
+    return;
+  }
 
   // 标记麦克风就绪，后续 keep-alive 静音帧将停止
   micReady = true;
