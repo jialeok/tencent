@@ -126,16 +126,45 @@ wss.on("connection", (clientWs, req) => {
   tencentWs.binaryType = "arraybuffer";
 
   // ── 腾讯 → 客户端 ───────────────────────────────────────────────────────────
+  let handshakeDone = false;  // 是否已收到腾讯 ASR 握手确认（code=0）
+
   tencentWs.on("open", () => {
-    console.log(`[上游] ${clientId} 腾讯 ASR 已连接`);
-    clientWs.send(JSON.stringify({ type: "proxy_ready" }));
+    // 不在这里发 proxy_ready，等收到 code=0 握手确认后再通知前端
+    console.log(`[上游] ${clientId} 腾讯 ASR WS 已连接，等待握手确认...`);
   });
 
   tencentWs.on("message", (data) => {
+    const text = data instanceof Buffer ? data.toString() : data;
+
     // 打印腾讯返回的文本消息（方便调试）
-    if (typeof data === "string" || data instanceof Buffer && data[0] === 123) {
-      try { console.log(`[上游消息] ${data.toString()}`); } catch {}
+    if (text[0] === '{') {
+      try { console.log(`[上游消息] ${text}`); } catch {}
     }
+
+    // 握手阶段：等待腾讯返回 code=0 确认，再通知前端就绪
+    if (!handshakeDone) {
+      try {
+        const msg = JSON.parse(text);
+        if (msg.code === 0) {
+          handshakeDone = true;
+          console.log(`[上游] ${clientId} 握手成功（code=0），通知前端就绪`);
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(JSON.stringify({ type: "proxy_ready" }));
+          }
+        } else {
+          console.error(`[上游] ${clientId} 握手失败 code=${msg.code} msg=${msg.message}`);
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(JSON.stringify({ type: "proxy_error", message: `握手失败 ${msg.code}: ${msg.message}` }));
+            clientWs.close(1011, "Upstream handshake failed");
+          }
+        }
+      } catch {
+        console.warn(`[上游] ${clientId} 握手阶段收到非 JSON 数据`);
+      }
+      return;  // 握手消息不转发给前端
+    }
+
+    // 识别阶段：正常透传
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(data);
     }
