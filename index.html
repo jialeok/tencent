@@ -205,8 +205,11 @@ let mediaStream     = null;
 let scriptProcessor = null;
 let pcmBuffer       = new Int16Array(0);
 let sendInterval    = null;
+let silenceInterval = null;  // keep-alive 静音帧，防止代理超时断连
 let isRecording     = false;
+let micReady        = false;  // 麦克风是否已就绪（区分静音阶段/真实音频阶段）
 let segments        = {};  // index -> { stable: string, interim: string }
+let _wsCloseExpected = false;  // 是否预期连接关闭（stopRecording 主动触发）
 
 // ─── 配置持久化（只存引擎/VAD/句号选项，不存密钥）────────────────────────────
 function loadConfig() {
@@ -282,6 +285,16 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
+  // 防止重复启动
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[WARN] 已有活跃连接，忽略重复启动', 'err');
+    return;
+  }
+
+  _wsCloseExpected = false;
+  micReady = false;
+  pcmBuffer = new Int16Array(0);
+
   const cfg = getConfig();
   const params = new URLSearchParams({
     engine:      cfg.engine,
@@ -290,52 +303,90 @@ async function startRecording() {
   });
   const wsUrl = `${PROXY_WS_URL}?${params}`;
 
-  log('连接代理服务器…');
+  log(`连接代理服务器… [${wsUrl}]`);
   ws = new WebSocket(wsUrl);
   ws.binaryType = 'arraybuffer';
 
   ws.onopen = () => {
-    log('已连接代理，等待上游就绪…', 'info');
+    log('[WS] onopen — 握手成功，等待代理上游就绪…', 'info');
   };
 
   ws.onmessage = (e) => {
     // 忽略二进制帧（腾讯偶尔发送的心跳/确认包）
-    if (e.data instanceof ArrayBuffer || e.data instanceof Blob) return;
+    if (e.data instanceof ArrayBuffer || e.data instanceof Blob) {
+      log(`[WS] 收到二进制帧 ${e.data.byteLength ?? '?'} bytes（忽略）`, 'info');
+      return;
+    }
+    log(`[WS] 收到文本: ${e.data.slice(0, 120)}`, 'info');
     try {
       const msg = JSON.parse(e.data);
       // 代理就绪信号
       if (msg.type === 'proxy_ready') {
-        log('上游腾讯 ASR 已连接，开始采集麦克风', 'ok');
+        log('[代理] 上游腾讯 ASR 已连接 ✓ — 停止静音 keep-alive，请求麦克风权限…', 'ok');
         setStatus('已连接', 'bg-green-500 animate-pulse_dot');
+        // 停止静音 keep-alive（麦克风就绪后切换为真实音频）
+        _stopSilenceKeepAlive();
         startMic().catch((err) => {
-          log(`麦克风启动失败: ${err.message}`, 'err');
+          log(`[MIC] 麦克风启动失败: ${err.message}`, 'err');
+          _wsCloseExpected = true;
           ws && ws.close();
         });
         return;
       }
       if (msg.type === 'proxy_error') {
-        log(`代理错误: ${msg.message}`, 'err');
+        log(`[代理] 代理错误: ${msg.message}`, 'err');
         return;
       }
       handleAsrMessage(msg);
     } catch (err) {
-      log(`JSON 解析错误: ${err.message}`, 'err');
+      log(`[WS] JSON 解析错误: ${err.message}`, 'err');
     }
   };
 
-  ws.onerror = () => {
-    log('WebSocket 错误', 'err');
+  ws.onerror = (ev) => {
+    log(`[WS] WebSocket error 事件（连接失败或被拒绝）`, 'err');
   };
 
   ws.onclose = (e) => {
-    log(`连接关闭 code=${e.code}`, e.code === 1000 ? 'info' : 'err');
-    finishRecording();
+    const tag = _wsCloseExpected ? 'info' : (e.code === 1000 ? 'info' : 'err');
+    log(`[WS] 连接关闭 code=${e.code} reason="${e.reason}" wasClean=${e.wasClean} expected=${_wsCloseExpected}`, tag);
+    _stopSilenceKeepAlive();
+    if (!_wsCloseExpected) {
+      // 非预期关闭（代理超时、上游拒绝等），自动清理
+      finishRecording();
+    }
   };
+
+  // ── keep-alive：proxy_ready 到来之前，每 200ms 发一帧静音 PCM ──────────────
+  // 防止代理或腾讯 ASR 因长时间无数据而超时断连
+  log('[AUDIO] 启动静音 keep-alive（等待上游就绪期间）', 'info');
+  const silenceChunk = new Int16Array(CHUNK_SAMPLES); // 全零 = 静音
+  silenceInterval = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      _stopSilenceKeepAlive();
+      return;
+    }
+    if (micReady) {
+      // 麦克风已就绪，停止静音帧（由 sendInterval 接管）
+      _stopSilenceKeepAlive();
+      return;
+    }
+    ws.send(silenceChunk.buffer.slice(0));
+  }, PCM_CHUNK_MS);
+}
+
+function _stopSilenceKeepAlive() {
+  if (silenceInterval) {
+    clearInterval(silenceInterval);
+    silenceInterval = null;
+    log('[AUDIO] 静音 keep-alive 已停止', 'info');
+  }
 }
 
 
 
 async function startMic() {
+  log('[MIC] 请求麦克风权限 (getUserMedia)…', 'info');
   isRecording = true;
   updateUI(true);
 
@@ -349,12 +400,18 @@ async function startMic() {
     },
   });
 
+  const tracks = mediaStream.getAudioTracks();
+  log(`[MIC] 权限获取成功 ✓ — track: "${tracks[0]?.label || '未知'}" state=${tracks[0]?.readyState}`, 'ok');
+
   audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  log(`[AudioCtx] 创建完成 sampleRate=${audioCtx.sampleRate} state=${audioCtx.state}`, 'info');
+
   const source = audioCtx.createMediaStreamSource(mediaStream);
 
   // ScriptProcessor 在部分浏览器已被标记 deprecated，但移动端兼容性最佳
   scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
 
+  let audioFrameCount = 0;
   scriptProcessor.onaudioprocess = (e) => {
     const f32    = e.inputBuffer.getChannelData(0);
     const i16    = float32ToInt16(f32);
@@ -362,36 +419,63 @@ async function startMic() {
     merged.set(pcmBuffer);
     merged.set(i16, pcmBuffer.length);
     pcmBuffer = merged;
+    audioFrameCount++;
+    if (audioFrameCount === 1) {
+      log(`[AUDIO] 首帧音频已采集 f32.length=${f32.length} bufLen=${pcmBuffer.length}`, 'ok');
+    }
   };
 
   source.connect(scriptProcessor);
   scriptProcessor.connect(audioCtx.destination);
 
+  // 标记麦克风就绪，后续 keep-alive 静音帧将停止
+  micReady = true;
+  log('[MIC] 麦克风节点已连接，开始发送真实音频', 'ok');
+
   // 按 1:1 实时率每 200ms 发送一次
+  let sendCount = 0;
   sendInterval = setInterval(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      log('[SEND] WS 非 OPEN 状态，跳过本次发送', 'err');
+      return;
+    }
     if (pcmBuffer.length >= CHUNK_SAMPLES) {
       const chunk = pcmBuffer.slice(0, CHUNK_SAMPLES);
       pcmBuffer   = pcmBuffer.slice(CHUNK_SAMPLES);
       ws.send(chunk.buffer);
+      sendCount++;
+      if (sendCount <= 3 || sendCount % 20 === 0) {
+        log(`[SEND] 第${sendCount}帧 PCM ${chunk.byteLength} bytes 已发送，bufRem=${pcmBuffer.length}`, 'info');
+      }
+    } else {
+      // 缓冲不足时发静音，维持 1:1 实时率
+      const silence = new Int16Array(CHUNK_SAMPLES);
+      ws.send(silence.buffer.slice(0));
     }
   }, PCM_CHUNK_MS);
 }
 
 function stopRecording() {
-  log('停止录音，发送 end 信号…');
+  log('[STOP] 停止录音，发送 end 信号…');
+  _wsCloseExpected = true;  // 标记预期关闭，防止 onclose 触发重复 finishRecording
+
   clearInterval(sendInterval);
   sendInterval = null;
+  _stopSilenceKeepAlive();
 
   // 发送剩余缓冲
   if (ws && ws.readyState === WebSocket.OPEN && pcmBuffer.length > 0) {
+    log(`[STOP] 发送剩余缓冲 ${pcmBuffer.byteLength} bytes`, 'info');
     ws.send(pcmBuffer.buffer);
     pcmBuffer = new Int16Array(0);
   }
 
   // 发送结束标记
   if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[STOP] 发送 {"type":"end"}', 'info');
     ws.send(JSON.stringify({ type: 'end' }));
+  } else {
+    log(`[STOP] WS 已非 OPEN（readyState=${ws?.readyState}），跳过 end 信号`, 'err');
   }
 
   // 释放音频资源
@@ -403,10 +487,15 @@ function stopRecording() {
 }
 
 function finishRecording() {
-  isRecording = false;
+  isRecording  = false;
+  micReady     = false;
   updateUI(false);
   setStatus('未连接', 'bg-muted');
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    ws.close(1000, 'session ended');
+  }
   ws = null;
+  log('[STATE] 录音会话结束，资源已释放', 'info');
 }
 
 // ─── ASR 消息处理 ─────────────────────────────────────────────────────────────
