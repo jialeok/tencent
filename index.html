@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>腾讯实时语音识别 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['"JetBrains Mono"', 'monospace'],
+          sans: ['"Noto Sans SC"', 'sans-serif'],
+        },
+        colors: {
+          ink: '#0d0d0d',
+          paper: '#f5f0e8',
+          accent: '#c84b31',
+          muted: '#8a8070',
+          line: '#d4ccbc',
+        },
+        keyframes: {
+          pulse_dot: {
+            '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+            '50%': { opacity: '0.4', transform: 'scale(0.8)' },
+          },
+          fade_in: {
+            '0%': { opacity: '0', transform: 'translateY(6px)' },
+            '100%': { opacity: '1', transform: 'translateY(0)' },
+          },
+          waveform: {
+            '0%, 100%': { height: '4px' },
+            '50%': { height: '20px' },
+          }
+        },
+        animation: {
+          pulse_dot: 'pulse_dot 1.2s ease-in-out infinite',
+          fade_in: 'fade_in 0.3s ease forwards',
+          wave1: 'waveform 0.8s ease-in-out infinite',
+          wave2: 'waveform 0.8s ease-in-out infinite 0.1s',
+          wave3: 'waveform 0.8s ease-in-out infinite 0.2s',
+          wave4: 'waveform 0.8s ease-in-out infinite 0.3s',
+          wave5: 'waveform 0.8s ease-in-out infinite 0.4s',
+        }
+      }
+    }
+  }
+</script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  body { background: #f5f0e8; }
+  .segment-stable { color: #0d0d0d; }
+  .segment-interim { color: #8a8070; border-bottom: 1px dashed #c84b31; }
+
+  #transcript-box:empty::before {
+    content: '点击麦克风开始说话…';
+    color: #b0a898;
+    font-style: italic;
+  }
+
+  .log-line { font-size: 11px; line-height: 1.6; }
+  .log-line.err { color: #c84b31; }
+  .log-line.ok  { color: #3a7d44; }
+  .log-line.info { color: #8a8070; }
+</style>
+</head>
+<body class="font-sans text-ink min-h-screen">
+
+<!-- Header -->
+<header class="border-b border-line bg-paper/80 backdrop-blur-sm sticky top-0 z-10">
+  <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-xs font-mono text-muted tracking-widest uppercase">Tencent ASR</span>
+      <span class="text-line">|</span>
+      <span class="text-sm text-muted">实时语音识别 WebSocket Demo</span>
+    </div>
+    <div id="status-badge" class="flex items-center gap-2 text-xs font-mono text-muted">
+      <span id="status-dot" class="w-2 h-2 rounded-full bg-muted inline-block"></span>
+      <span id="status-text">未连接</span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-6 py-8 space-y-6">
+
+  <!-- Config Panel -->
+  <section class="border border-line rounded-lg p-5 bg-paper space-y-4">
+    <h2 class="text-xs font-mono tracking-widest text-muted uppercase">配置</h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-muted mb-1 font-mono">引擎模型</label>
+        <select id="cfg-engine" class="w-full border border-line rounded px-3 py-2 text-sm bg-white font-mono focus:outline-none focus:border-accent">
+          <option value="16k_zh">16k_zh（中文通用）</option>
+          <option value="16k_zh_large">16k_zh_large（普方英大模型）</option>
+          <option value="16k_zh_en">16k_zh_en（中英粤大模型）</option>
+          <option value="16k_en">16k_en（英文）</option>
+          <option value="8k_zh">8k_zh（电话中文）</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-6 pt-4">
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input id="cfg-vad" type="checkbox" checked class="accent-accent" />
+          <span>开启 VAD</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input id="cfg-punc" type="checkbox" class="accent-accent" />
+          <span>过滤句末句号</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="pt-1">
+      <button id="save-btn" onclick="saveConfig()"
+        class="text-xs font-mono border border-accent text-accent hover:bg-accent hover:text-paper rounded px-3 py-1.5 transition-colors">
+        保存配置
+      </button>
+      <span id="save-ok" class="ml-2 text-xs text-green-600 hidden font-mono">✓ 已保存</span>
+    </div>
+  </section>
+
+  <!-- Main Controls -->
+  <section class="border border-line rounded-lg p-5 bg-paper">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-xs font-mono tracking-widest text-muted uppercase">识别</h2>
+      <!-- Waveform -->
+      <div id="waveform" class="hidden items-center gap-0.5 h-6">
+        <div class="w-1 bg-accent rounded-full animate-wave1"></div>
+        <div class="w-1 bg-accent rounded-full animate-wave2"></div>
+        <div class="w-1 bg-accent rounded-full animate-wave3"></div>
+        <div class="w-1 bg-accent rounded-full animate-wave4"></div>
+        <div class="w-1 bg-accent rounded-full animate-wave5"></div>
+      </div>
+    </div>
+
+    <!-- Mic Button -->
+    <div class="flex justify-center mb-6">
+      <button id="mic-btn" onclick="toggleRecording()"
+        class="w-20 h-20 rounded-full border-2 border-ink flex items-center justify-center transition-all duration-200 hover:bg-ink hover:text-paper group relative"
+        title="开始/停止录音">
+        <!-- Mic icon -->
+        <svg id="icon-mic" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+        <!-- Stop icon -->
+        <svg id="icon-stop" class="w-8 h-8 hidden" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="5" y="5" width="14" height="14" rx="2"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Transcript -->
+    <div class="border border-line rounded-md p-4 min-h-36 bg-white text-sm leading-relaxed font-sans"
+         id="transcript-box">
+    </div>
+
+    <!-- Actions -->
+    <div class="flex gap-3 mt-3">
+      <button onclick="copyTranscript()"
+        class="text-xs font-mono text-muted border border-line rounded px-3 py-1.5 hover:border-ink hover:text-ink transition-colors">
+        复制文本
+      </button>
+      <button onclick="clearTranscript()"
+        class="text-xs font-mono text-muted border border-line rounded px-3 py-1.5 hover:border-accent hover:text-accent transition-colors">
+        清空
+      </button>
+      <div class="ml-auto text-xs font-mono text-muted self-center" id="word-count">0 字</div>
+    </div>
+  </section>
+
+  <!-- Log Panel -->
+  <section class="border border-line rounded-lg p-5 bg-paper">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xs font-mono tracking-widest text-muted uppercase">日志</h2>
+      <button onclick="clearLog()" class="text-xs font-mono text-muted hover:text-ink transition-colors">清空</button>
+    </div>
+    <div id="log-box" class="font-mono bg-ink rounded-md p-3 h-32 overflow-y-auto space-y-0.5 text-paper/70">
+      <div class="log-line info">— 就绪，等待操作 —</div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ─── 常量（指向 Render 代理服务器）──────────────────────────────────────────
+// 部署到 Render 后，将下面的地址替换为你的 Render 服务地址
+// 例如: wss://tencent-asr-proxy.onrender.com/asr
+const PROXY_WS_URL = 'wss://YOUR_RENDER_APP.onrender.com/asr';
+
+const PCM_CHUNK_MS  = 200;       // 每次发送 200ms 音频
+const SAMPLE_RATE   = 16000;
+const CHUNK_SAMPLES = SAMPLE_RATE * PCM_CHUNK_MS / 1000; // 3200 samples
+
+// ─── 状态 ─────────────────────────────────────────────────────────────────────
+let ws              = null;
+let audioCtx        = null;
+let mediaStream     = null;
+let scriptProcessor = null;
+let pcmBuffer       = new Int16Array(0);
+let sendInterval    = null;
+let isRecording     = false;
+let segments        = {};  // index -> { stable: string, interim: string }
+
+// ─── 配置持久化（只存引擎/VAD/句号选项，不存密钥）────────────────────────────
+function loadConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
+    if (c.engine) document.getElementById('cfg-engine').value = c.engine;
+    if (c.vad    !== undefined) document.getElementById('cfg-vad').checked  = c.vad;
+    if (c.punc   !== undefined) document.getElementById('cfg-punc').checked = c.punc;
+  } catch (e) {
+    // ignore
+  }
+}
+
+function saveConfig() {
+  const c = getConfig();
+  localStorage.setItem('tencent_asr_cfg', JSON.stringify({
+    engine: c.engine,
+    vad:    c.vad,
+    punc:   c.punc,
+  }));
+  const ok = document.getElementById('save-ok');
+  ok.classList.remove('hidden');
+  setTimeout(() => ok.classList.add('hidden'), 2000);
+}
+
+function getConfig() {
+  return {
+    engine: document.getElementById('cfg-engine').value,
+    vad:    document.getElementById('cfg-vad').checked,
+    punc:   document.getElementById('cfg-punc').checked,
+  };
+}
+
+// ─── 日志 ─────────────────────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const box = document.getElementById('log-box');
+  const d   = document.createElement('div');
+  d.className = `log-line ${type}`;
+  const ts  = new Date().toTimeString().slice(0, 8);
+  d.textContent = `[${ts}] ${msg}`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-box').innerHTML = '';
+}
+
+// ─── 状态指示 ─────────────────────────────────────────────────────────────────
+function setStatus(text, color) {
+  document.getElementById('status-text').textContent = text;
+  const dot = document.getElementById('status-dot');
+  dot.className = `w-2 h-2 rounded-full ${color}`;
+}
+
+// ─── 主开关 ───────────────────────────────────────────────────────────────────
+async function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  const cfg = getConfig();
+  const params = new URLSearchParams({
+    engine:      cfg.engine,
+    needvad:     cfg.vad    ? '1' : '0',
+    filter_punc: cfg.punc   ? '1' : '0',
+  });
+  const wsUrl = `${PROXY_WS_URL}?${params}`;
+
+  log('连接代理服务器…');
+  ws = new WebSocket(wsUrl);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    log('已连接代理，等待上游就绪…', 'info');
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      // 代理就绪信号
+      if (msg.type === 'proxy_ready') {
+        log('上游腾讯 ASR 已连接，开始采集麦克风', 'ok');
+        setStatus('已连接', 'bg-green-500 animate-pulse_dot');
+        startMic().catch((err) => {
+          log(`麦克风启动失败: ${err.message}`, 'err');
+          ws && ws.close();
+        });
+        return;
+      }
+      if (msg.type === 'proxy_error') {
+        log(`代理错误: ${msg.message}`, 'err');
+        return;
+      }
+      handleAsrMessage(msg);
+    } catch (err) {
+      log(`JSON 解析错误: ${err.message}`, 'err');
+    }
+  };
+
+  ws.onerror = () => {
+    log('WebSocket 错误', 'err');
+  };
+
+  ws.onclose = (e) => {
+    log(`连接关闭 code=${e.code}`, e.code === 1000 ? 'info' : 'err');
+    finishRecording();
+  };
+}
+
+
+
+async function startMic() {
+  isRecording = true;
+  updateUI(true);
+
+  // 请求麦克风权限
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount:     1,
+      sampleRate:       SAMPLE_RATE,
+      echoCancellation: true,
+      noiseSuppression: true,
+    },
+  });
+
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const source = audioCtx.createMediaStreamSource(mediaStream);
+
+  // ScriptProcessor 在部分浏览器已被标记 deprecated，但移动端兼容性最佳
+  scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+  scriptProcessor.onaudioprocess = (e) => {
+    const f32    = e.inputBuffer.getChannelData(0);
+    const i16    = float32ToInt16(f32);
+    const merged = new Int16Array(pcmBuffer.length + i16.length);
+    merged.set(pcmBuffer);
+    merged.set(i16, pcmBuffer.length);
+    pcmBuffer = merged;
+  };
+
+  source.connect(scriptProcessor);
+  scriptProcessor.connect(audioCtx.destination);
+
+  // 按 1:1 实时率每 200ms 发送一次
+  sendInterval = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (pcmBuffer.length >= CHUNK_SAMPLES) {
+      const chunk = pcmBuffer.slice(0, CHUNK_SAMPLES);
+      pcmBuffer   = pcmBuffer.slice(CHUNK_SAMPLES);
+      ws.send(chunk.buffer);
+    }
+  }, PCM_CHUNK_MS);
+}
+
+function stopRecording() {
+  log('停止录音，发送 end 信号…');
+  clearInterval(sendInterval);
+  sendInterval = null;
+
+  // 发送剩余缓冲
+  if (ws && ws.readyState === WebSocket.OPEN && pcmBuffer.length > 0) {
+    ws.send(pcmBuffer.buffer);
+    pcmBuffer = new Int16Array(0);
+  }
+
+  // 发送结束标记
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'end' }));
+  }
+
+  // 释放音频资源
+  if (mediaStream)     { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+  if (audioCtx)        { audioCtx.close(); audioCtx = null; }
+
+  finishRecording();
+}
+
+function finishRecording() {
+  isRecording = false;
+  updateUI(false);
+  setStatus('未连接', 'bg-muted');
+  ws = null;
+}
+
+// ─── ASR 消息处理 ─────────────────────────────────────────────────────────────
+function handleAsrMessage(msg) {
+  if (msg.code !== 0) {
+    log(`ASR 错误 ${msg.code}: ${msg.message}`, 'err');
+    return;
+  }
+  if (msg.final === 1) {
+    log('识别完成 ✓', 'ok');
+    renderTranscript();
+    return;
+  }
+
+  const r = msg.result;
+  if (!r) return;
+
+  const idx = r.index;
+  if (!segments[idx]) segments[idx] = { stable: '', interim: '' };
+
+  if (r.slice_type === 2) {
+    // 稳态结果
+    segments[idx].stable  = r.voice_text_str;
+    segments[idx].interim = '';
+    log(`[稳定] #${idx}: ${r.voice_text_str}`, 'ok');
+  } else {
+    // 中间结果
+    segments[idx].interim = r.voice_text_str;
+  }
+
+  renderTranscript();
+}
+
+function renderTranscript() {
+  const box     = document.getElementById('transcript-box');
+  box.innerHTML = '';
+  const indices = Object.keys(segments).map(Number).sort((a, b) => a - b);
+
+  for (const idx of indices) {
+    const seg = segments[idx];
+    if (seg.stable) {
+      const span = document.createElement('span');
+      span.className   = 'segment-stable animate-fade_in';
+      span.textContent = seg.stable;
+      box.appendChild(span);
+    }
+    if (seg.interim) {
+      const span = document.createElement('span');
+      span.className   = 'segment-interim';
+      span.textContent = seg.interim;
+      box.appendChild(span);
+    }
+  }
+
+  const text = box.innerText || '';
+  document.getElementById('word-count').textContent =
+    `${[...text.replace(/\s/g, '')].length} 字`;
+}
+
+// ─── 工具函数 ─────────────────────────────────────────────────────────────────
+function float32ToInt16(f32) {
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    i16[i]  = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return i16;
+}
+
+function updateUI(recording) {
+  document.getElementById('icon-mic').classList.toggle('hidden', recording);
+  document.getElementById('icon-stop').classList.toggle('hidden', !recording);
+  const btn = document.getElementById('mic-btn');
+  btn.classList.toggle('bg-accent',     recording);
+  btn.classList.toggle('border-accent', recording);
+  btn.classList.toggle('text-paper',    recording);
+  const wf = document.getElementById('waveform');
+  wf.classList.toggle('hidden', !recording);
+  wf.classList.toggle('flex',    recording);
+}
+
+function copyTranscript() {
+  const text = document.getElementById('transcript-box').innerText;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => log('已复制到剪贴板', 'ok'));
+}
+
+function clearTranscript() {
+  segments = {};
+  document.getElementById('transcript-box').innerHTML = '';
+  document.getElementById('word-count').textContent   = '0 字';
+}
+
+// ─── 初始化 ───────────────────────────────────────────────────────────────────
+loadConfig();
+</script>
+
+</body>
+</html>
