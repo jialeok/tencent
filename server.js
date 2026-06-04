@@ -41,7 +41,8 @@ function buildTencentWsUrl(options = {}) {
 
   const timestamp = Math.floor(Date.now() / 1000);
   const expired   = timestamp + 86400;
-  const nonce     = Math.floor(Math.random() * 100000);
+  const nonce     = Math.floor(Math.random() * 1000000000); // 最长10位随机数
+  const voice_id  = crypto.randomUUID();                    // 必填！每次连接唯一
 
   const params = {
     secretid:          SECRET_ID,
@@ -52,6 +53,7 @@ function buildTencentWsUrl(options = {}) {
     needvad,
     filter_punc,
     voice_format,
+    voice_id,   // 必填参数
     word_info,
   };
 
@@ -64,6 +66,8 @@ function buildTencentWsUrl(options = {}) {
     APPID +
     "?" +
     sortedKeys.map((k) => `${k}=${params[k]}`).join("&");
+
+  console.log("[签名原串]", signStr);
 
   const signature = crypto
     .createHmac("sha1", SECRET_KEY)
@@ -121,16 +125,17 @@ wss.on("connection", (clientWs, req) => {
   const tencentWs  = new WebSocket(tencentUrl);
   tencentWs.binaryType = "arraybuffer";
 
-  let ready = false; // 腾讯连接是否就绪
-
   // ── 腾讯 → 客户端 ───────────────────────────────────────────────────────────
   tencentWs.on("open", () => {
-    ready = true;
     console.log(`[上游] ${clientId} 腾讯 ASR 已连接`);
     clientWs.send(JSON.stringify({ type: "proxy_ready" }));
   });
 
   tencentWs.on("message", (data) => {
+    // 打印腾讯返回的文本消息（方便调试）
+    if (typeof data === "string" || data instanceof Buffer && data[0] === 123) {
+      try { console.log(`[上游消息] ${data.toString()}`); } catch {}
+    }
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(data);
     }
@@ -145,7 +150,7 @@ wss.on("connection", (clientWs, req) => {
   });
 
   tencentWs.on("close", (code, reason) => {
-    console.log(`[上游关闭] ${clientId} code=${code}`);
+    console.log(`[上游关闭] ${clientId} code=${code} reason=${reason}`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1000, "Upstream closed");
     }
@@ -156,15 +161,15 @@ wss.on("connection", (clientWs, req) => {
     if (tencentWs.readyState !== WebSocket.OPEN) return;
 
     if (data instanceof Buffer) {
-      // PCM 二进制音频数据
+      // PCM 二进制音频数据，直接透传
       tencentWs.send(data);
     } else {
       // 文本控制消息（如 { type: "end" }）
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === "end") {
-          // 发送结束帧（空音频 + end 标记）
-          tencentWs.send(new Int8Array(0).buffer);
+          // 按文档要求发送结束标记文本消息
+          tencentWs.send(JSON.stringify({ type: "end" }));
         }
       } catch {
         // 忽略非 JSON

@@ -193,7 +193,7 @@ const PROXY_WS_URL = 'wss://tencen.onrender.com/asr';
 
 const PCM_CHUNK_MS  = 200;       // 每次发送 200ms 音频
 const SAMPLE_RATE   = 16000;
-const CHUNK_SAMPLES = SAMPLE_RATE * PCM_CHUNK_MS / 1000; // 3200 samples
+const CHUNK_SAMPLES = SAMPLE_RATE * PCM_CHUNK_MS / 1000; // 3200 samples (Int16 = 6400字节，符合文档要求)
 
 // ─── 状态 ─────────────────────────────────────────────────────────────────────
 let ws              = null;
