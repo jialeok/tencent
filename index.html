@@ -176,7 +176,10 @@
   <section class="border border-line rounded-lg p-5 bg-paper">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-xs font-mono tracking-widest text-muted uppercase">日志</h2>
-      <button onclick="clearLog()" class="text-xs font-mono text-muted hover:text-ink transition-colors">清空</button>
+      <div class="flex items-center gap-3">
+        <button onclick="copyLog()" class="text-xs font-mono text-muted hover:text-ink transition-colors">复制</button>
+        <button onclick="clearLog()" class="text-xs font-mono text-muted hover:text-ink transition-colors">清空</button>
+      </div>
     </div>
     <div id="log-box" class="font-mono bg-ink rounded-md p-3 h-32 overflow-y-auto space-y-0.5 text-paper/70">
       <div class="log-line info">— 就绪，等待操作 —</div>
@@ -252,6 +255,16 @@ function clearLog() {
   document.getElementById('log-box').innerHTML = '';
 }
 
+function copyLog() {
+  const box = document.getElementById('log-box');
+  const lines = Array.from(box.querySelectorAll('.log-line'))
+    .map(el => el.textContent).join('\n');
+  if (!lines) return;
+  navigator.clipboard.writeText(lines).then(() => {
+    log('日志已复制到剪贴板', 'ok');
+  });
+}
+
 // ─── 状态指示 ─────────────────────────────────────────────────────────────────
 function setStatus(text, color) {
   document.getElementById('status-text').textContent = text;
@@ -286,6 +299,8 @@ async function startRecording() {
   };
 
   ws.onmessage = (e) => {
+    // 忽略二进制帧（腾讯偶尔发送的心跳/确认包）
+    if (e.data instanceof ArrayBuffer || e.data instanceof Blob) return;
     try {
       const msg = JSON.parse(e.data);
       // 代理就绪信号
