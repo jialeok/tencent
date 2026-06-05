@@ -199,9 +199,12 @@
   }
   .suggest-wrap { overflow: hidden; }
   .suggest-tags {
-    display: flex; flex-wrap: nowrap; gap: 7px;
-    animation: scroll-tags 40s linear infinite;
+    display: grid;
+    grid-template-rows: repeat(3, auto);
+    grid-auto-flow: column;
+    gap: 7px;
     width: max-content;
+    animation: scroll-tags 45s linear infinite;
   }
   .suggest-wrap:hover .suggest-tags { animation-play-state: paused; }
   @keyframes scroll-tags {
