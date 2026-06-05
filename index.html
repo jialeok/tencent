@@ -27,7 +27,7 @@
     --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
     --shadow:    0 4px 12px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.05);
     --shadow-lg: 0 12px 32px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.06);
-    --bottom-bar: 72px;
+    --bottom-bar: 66px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { font-size: 15px; }
@@ -270,75 +270,23 @@
   .log-info { color: rgba(255,255,255,.4); }
 
   /* ══════════════════════════════════════════════════════════
-     BOTTOM BAR  (WeChat-style press-to-talk)
+     TRANSCRIPT STRIP (now in page, above AI answer)
   ══════════════════════════════════════════════════════════ */
-  .bottom-bar {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 150;
-    background: var(--gray-0);
-    border-top: 1px solid var(--gray-3);
-    box-shadow: 0 -2px 12px rgba(0,0,0,.06);
-  }
-
-  /* mode toggle row */
-  .bar-mode-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px 6px;
-  }
-  .mode-btn {
-    display: flex; align-items: center; justify-content: center;
-    width: 36px; height: 36px; border-radius: 8px;
-    border: 1px solid var(--gray-3); background: var(--gray-1);
-    cursor: pointer; transition: all .15s; flex-shrink: 0;
-    color: var(--gray-6);
-  }
-  .mode-btn svg { width: 18px; height: 18px; }
-  .mode-btn:hover { background: var(--gray-2); border-color: var(--gray-4); color: var(--gray-8); }
-  .mode-btn.active { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
-
-  /* text input area (shown in text mode) */
-  .text-input-wrap {
-    flex: 1; display: flex; gap: 8px; align-items: center;
-  }
-  #text-input {
-    flex: 1; height: 36px; padding: 0 12px;
-    border: 1px solid var(--gray-3); border-radius: 8px;
-    font-size: 14px; font-family: inherit;
-    color: var(--gray-8); background: var(--gray-1); outline: none;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  #text-input:focus {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 3px rgba(26,86,219,.10);
-    background: var(--gray-0);
-  }
-  #text-input::placeholder { color: var(--gray-4); }
-  #send-btn {
-    width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
-    background: var(--blue); border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background .15s;
-  }
-  #send-btn:hover { background: var(--blue-d); }
-  #send-btn svg { width: 16px; height: 16px; color: #fff; }
-
-  /* voice mode: placeholder spacer */
-  .voice-mode-spacer { flex: 1; }
-
-  /* ── Transcript strip (inside bottom bar) ──────────────── */
   .transcript-strip {
     display: none;
-    border-top: 1px solid var(--gray-2);
     background: var(--gray-0);
+    border: 1px solid var(--gray-3);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+    overflow: hidden;
   }
   .transcript-strip.has-text,
   .transcript-strip.recording {
     display: block;
   }
-  /* when text mode hides the strip via inline style, classes are irrelevant */
   .transcript-strip-inner {
-    padding: 10px 12px 8px;
+    padding: 10px 14px 8px;
   }
   .transcript-box {
     font-size: 14px;
@@ -368,13 +316,66 @@
   }
   .btn-icon:hover { background: var(--gray-2); color: var(--gray-7); }
 
-  /* BIG press-to-talk button (voice mode) */
+  /* ══════════════════════════════════════════════════════════
+     BOTTOM BAR  — single row: [PTB btn grow] [kbd toggle]
+  ══════════════════════════════════════════════════════════ */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 150;
+    background: var(--gray-0);
+    border-top: 1px solid var(--gray-3);
+    box-shadow: 0 -2px 12px rgba(0,0,0,.06);
+    padding: 10px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* mode toggle btn (keyboard icon, right side) */
+  .mode-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 46px; height: 46px; border-radius: 10px;
+    border: 1.5px solid var(--gray-3); background: var(--gray-1);
+    cursor: pointer; transition: all .15s; flex-shrink: 0;
+    color: var(--gray-6);
+  }
+  .mode-btn svg { width: 18px; height: 18px; }
+  .mode-btn:hover { background: var(--gray-2); border-color: var(--gray-4); color: var(--gray-8); }
+  .mode-btn.active { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
+
+  /* text input area (shown in text mode) */
+  .text-input-wrap {
+    flex: 1; display: flex; gap: 8px; align-items: center;
+  }
+  #text-input {
+    flex: 1; height: 46px; padding: 0 12px;
+    border: 1.5px solid var(--gray-3); border-radius: 10px;
+    font-size: 14px; font-family: inherit;
+    color: var(--gray-8); background: var(--gray-1); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #text-input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(26,86,219,.10);
+    background: var(--gray-0);
+  }
+  #text-input::placeholder { color: var(--gray-4); }
+  #send-btn {
+    width: 46px; height: 46px; border-radius: 10px; flex-shrink: 0;
+    background: var(--blue); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  #send-btn:hover { background: var(--blue-d); }
+  #send-btn svg { width: 16px; height: 16px; color: #fff; }
+
+  /* ── Press-to-talk button (fills flex, voice mode) ──────── */
   .ptb-row {
-    padding: 0 12px 10px;
+    flex: 1;
+    display: flex;
   }
 
   #ptb-btn {
-    width: 100%; height: 46px;
+    flex: 1; height: 46px;
     border-radius: 10px;
     border: 1.5px solid var(--gray-3);
     background: var(--gray-1);
@@ -408,15 +409,11 @@
     box-shadow: 0 2px 8px rgba(26,86,219,.35);
   }
   #ptb-btn.pressed svg { color: #fff; }
-
-  /* ripple on press */
   #ptb-btn::after {
     content: '';
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background: rgba(255,255,255,.25);
-    opacity: 0;
-    transition: opacity .1s;
+    opacity: 0; transition: opacity .1s;
   }
   #ptb-btn.pressed::after { opacity: 1; }
 </style>
@@ -494,7 +491,33 @@
 </div>
 
 <!-- ── Page ──────────────────────────────────────────────────── -->
-<div class="page">
+<div class="page" id="page-area">
+
+  <!-- Transcript strip (shown when recording or has text) -->
+  <div class="transcript-strip" id="transcript-strip">
+    <div class="transcript-strip-inner">
+      <div class="transcript-box" id="transcript-box"></div>
+      <div class="transcript-strip-meta">
+        <div class="waveform" id="waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+        <span class="word-count" id="word-count"></span>
+        <button class="btn-icon" onclick="copyTranscript()" title="复制">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+          </svg>
+        </button>
+        <button class="btn-icon" onclick="clearAll()" title="清空">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M3 4h10M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Answer card -->
   <div class="card">
@@ -532,72 +555,11 @@
 </div><!-- /page -->
 
 <!-- ══════════════════════════════════════════════════════════
-     BOTTOM BAR
+     BOTTOM BAR — single row
 ══════════════════════════════════════════════════════════ -->
 <div class="bottom-bar">
-  <!-- mode row -->
-  <div class="bar-mode-row">
 
-    <!-- voice mode toggle -->
-    <button class="mode-btn active" id="mode-voice-btn" onclick="setMode('voice')" title="语音输入">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-        <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-        <line x1="12" y1="19" x2="12" y2="22"/>
-        <line x1="8"  y1="22" x2="16" y2="22"/>
-      </svg>
-    </button>
-
-    <!-- text input (shown in text mode) -->
-    <div class="text-input-wrap" id="text-wrap" style="display:none;">
-      <input id="text-input" type="text" placeholder="输入问题，按回车或点发送…" />
-      <button id="send-btn" onclick="manualQuery()" title="发送">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 10l14-7-6 14-2-5-6-2z" fill="currentColor" stroke="none"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- voice mode spacer (shown in voice mode) -->
-    <div class="voice-mode-spacer" id="voice-spacer"></div>
-
-    <!-- keyboard / text mode toggle -->
-    <button class="mode-btn" id="mode-text-btn" onclick="setMode('text')" title="文字输入">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-        <rect x="3" y="5" width="18" height="14" rx="2"/>
-        <path d="M7 15V9m5 6V9m5 6V9M3 11h18"/>
-      </svg>
-    </button>
-
-  </div>
-
-  <!-- transcript strip (voice mode only) -->
-  <div class="transcript-strip" id="transcript-strip">
-    <div class="transcript-strip-inner">
-      <div class="transcript-box" id="transcript-box"></div>
-      <div class="transcript-strip-meta">
-        <div class="waveform" id="waveform">
-          <div class="wave-bar"></div><div class="wave-bar"></div>
-          <div class="wave-bar"></div><div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-        </div>
-        <span class="word-count" id="word-count"></span>
-        <button class="btn-icon" onclick="copyTranscript()" title="复制">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
-            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
-          </svg>
-        </button>
-        <button class="btn-icon" onclick="clearAll()" title="清空">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M3 4h10M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- press-to-talk row (voice mode only) -->
+  <!-- voice mode: [PTB btn] [kbd toggle] -->
   <div class="ptb-row" id="ptb-row">
     <button id="ptb-btn"
       onmousedown="ptbStart(event)"
@@ -615,6 +577,24 @@
       <span id="ptb-label">按住说话</span>
     </button>
   </div>
+
+  <!-- text mode: [input] [send] — hidden initially -->
+  <div class="text-input-wrap" id="text-wrap" style="display:none;">
+    <input id="text-input" type="text" placeholder="输入问题，按回车发送…" />
+    <button id="send-btn" onclick="manualQuery()" title="发送">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 10l14-7-6 14-2-5-6-2z" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- toggle btn: keyboard icon, voice mode only -->
+  <button class="mode-btn" id="mode-toggle-btn" onclick="toggleMode()" title="切换输入方式">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="M7 15V9m5 6V9m5 6V9M3 11h18"/>
+    </svg>
+  </button>
 
 </div>
 
@@ -676,14 +656,15 @@ let currentMode = 'voice';
 function setMode(mode) {
   currentMode = mode;
   const isVoice = mode === 'voice';
-  document.getElementById('mode-voice-btn').classList.toggle('active', isVoice);
-  document.getElementById('mode-text-btn').classList.toggle('active', !isVoice);
-  document.getElementById('ptb-row').style.display      = isVoice ? '' : 'none';
-  document.getElementById('voice-spacer').style.display = isVoice ? '' : 'none';
-  document.getElementById('text-wrap').style.display    = isVoice ? 'none' : 'flex';
-  // 文字模式隐藏 strip；语音模式由 CSS class 控制显隐
+  document.getElementById('ptb-row').style.display        = isVoice ? 'flex' : 'none';
+  document.getElementById('text-wrap').style.display      = isVoice ? 'none' : 'flex';
+  document.getElementById('mode-toggle-btn').style.display = isVoice ? '' : 'none';
+  // transcript-strip 文字模式下隐藏，语音模式由 CSS class 控制
   document.getElementById('transcript-strip').style.display = isVoice ? '' : 'none';
   if (!isVoice) setTimeout(() => document.getElementById('text-input').focus(), 50);
+}
+function toggleMode() {
+  setMode(currentMode === 'voice' ? 'text' : 'voice');
 }
 
 // ─── 日志 ─────────────────────────────────────────────────────────────────────
@@ -1097,6 +1078,7 @@ function manualQuery() {
   if (!q) return;
   queryKnowledge(q);
   input.value = '';
+  setMode('voice'); // 发送后回到语音模式
 }
 document.getElementById('text-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') manualQuery();
@@ -1129,6 +1111,16 @@ function clearAll() {
 
 // ─── 初始化 ───────────────────────────────────────────────────────────────────
 loadConfig();
+
+// 点击底部栏以外的区域返回语音模式（仅在文字框为空且未发送时）
+document.addEventListener('click', (e) => {
+  if (currentMode !== 'text') return;
+  const input = document.getElementById('text-input');
+  if (input.value.trim() !== '') return; // 有内容时不切换
+  // 点击在底部栏内（含 input、send-btn、mode-btn）则不切换
+  if (e.target.closest('.bottom-bar')) return;
+  setMode('voice');
+});
 </script>
 
 </body>
