@@ -211,6 +211,24 @@
 
   /* ── Answer ─────────────────────────────────────────────── */
   .answer-header { display: flex; align-items: center; gap: 8px; }
+
+  /* TTS 播放控制按钮 */
+  #tts-btn {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1.5px solid var(--gray-3); background: var(--gray-1);
+    cursor: pointer; transition: all .15s; flex-shrink: 0;
+    color: var(--gray-6);
+  }
+  #tts-btn svg { width: 14px; height: 14px; pointer-events: none; }
+  #tts-btn:hover { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
+  #tts-btn.playing { background: var(--blue); border-color: var(--blue-d); color: #fff; }
+  #tts-btn.playing:hover { background: var(--blue-d); }
+  #tts-btn.playing .icon-play { display: none; }
+  #tts-btn.playing .icon-stop { display: block; }
+  #tts-btn:not(.playing) .icon-play { display: block; }
+  #tts-btn:not(.playing) .icon-stop { display: none; }
   .answer-badge {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 2px 8px; background: var(--blue-l); color: var(--blue);
@@ -531,6 +549,18 @@
         </span>
         <div class="spinner" id="answer-loading"></div>
       </div>
+      <!-- TTS 播放控制 -->
+      <button id="tts-btn" onclick="toggleTts()" title="播放 / 停止">
+        <!-- 播放图标 -->
+        <svg class="icon-play" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4 3.2a.8.8 0 0 1 1.2-.7l7 4.8a.8.8 0 0 1 0 1.4l-7 4.8A.8.8 0 0 1 4 12.8V3.2z"/>
+        </svg>
+        <!-- 停止图标 -->
+        <svg class="icon-stop" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="3" y="3" width="4" height="10" rx="1"/>
+          <rect x="9" y="3" width="4" height="10" rx="1"/>
+        </svg>
+      </button>
     </div>
     <div id="answer-box" class="empty">等待提问…</div>
   </div>
@@ -1040,11 +1070,47 @@ function renderTranscript() {
 // ─── TTS 分句播放 ─────────────────────────────────────────────────────────────
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY';
 
-let _ttsQueue   = [];   // 待播句子
-let _ttsPlaying = false;
+let _ttsQueue      = [];     // { idx, url } 待播队列
+let _ttsPlaying    = false;  // 当前是否在播
+let _ttsAudio      = null;   // 当前 Audio 实例
+let _ttsStopped    = false;  // 用户主动停止标志
+let _ttsLastText   = '';     // 最近一次播报文本（用于重播）
+let _ttsReadyUrls  = [];     // 所有已合成的 blob URL（重播用）
+
+function _setTtsBtn(state) {
+  // state: 'hidden' | 'play' | 'playing'
+  const btn = document.getElementById('tts-btn');
+  if (state === 'hidden') { btn.style.display = 'none'; return; }
+  btn.style.display = 'flex';
+  if (state === 'playing') btn.classList.add('playing');
+  else btn.classList.remove('playing');
+}
+
+function stopTts() {
+  _ttsStopped = true;
+  if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio = null; }
+  _ttsQueue   = [];
+  _ttsPlaying = false;
+  _setTtsBtn('play');
+  log('[TTS] 已停止', 'info');
+}
+
+function toggleTts() {
+  if (_ttsPlaying) {
+    stopTts();
+  } else {
+    // 重播：用已缓存的 URL 顺序重新播放
+    if (_ttsReadyUrls.length > 0) {
+      log('[TTS] 重播…', 'info');
+      _ttsStopped = false;
+      _ttsQueue   = _ttsReadyUrls.map((url, idx) => ({ idx, url }));
+      _ttsPlaying = false;
+      _playNext();
+    }
+  }
+}
 
 function splitSentences(text) {
-  // 按句末标点切分，保留标点，过滤空串
   return text.split(/(?<=[。！？!?…]+)/).map(s => s.trim()).filter(s => s.length > 0);
 }
 
@@ -1060,53 +1126,64 @@ async function fetchTtsAudio(text) {
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  // base64 mp3 → blob URL
   const binary = atob(data.audio);
   const bytes  = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
 }
 
-async function _playNext() {
-  if (_ttsPlaying || _ttsQueue.length === 0) return;
+function _playNext() {
+  if (_ttsStopped || _ttsPlaying || _ttsQueue.length === 0) return;
   _ttsPlaying = true;
+  _setTtsBtn('playing');
   const { url } = _ttsQueue.shift();
-  const audio   = new Audio(url);
-  audio.onended = () => {
-    URL.revokeObjectURL(url);
+  _ttsAudio = new Audio(url);
+  _ttsAudio.onended = () => {
+    _ttsAudio  = null;
+    _ttsPlaying = false;
+    if (_ttsQueue.length === 0) {
+      _setTtsBtn('play');  // 播完恢复重播按钮
+      log('[TTS] 播放完毕', 'ok');
+    } else {
+      _playNext();
+    }
+  };
+  _ttsAudio.onerror = () => {
+    _ttsAudio  = null;
     _ttsPlaying = false;
     _playNext();
   };
-  audio.onerror = () => {
-    _ttsPlaying = false;
-    _playNext();
-  };
-  audio.play().catch(() => { _ttsPlaying = false; _playNext(); });
+  _ttsAudio.play().catch(() => { _ttsPlaying = false; _playNext(); });
 }
 
-// 主入口：把文本分句，并发预取，顺序播放
+// 主入口：分句并发合成，按序播放
 async function speakText(text) {
-  _ttsQueue   = [];
-  _ttsPlaying = false;
+  stopTts();  // 先停掉上一次
+  _ttsStopped   = false;
+  _ttsLastText  = text;
+  _ttsReadyUrls = [];
 
   const sentences = splitSentences(text);
   if (sentences.length === 0) return;
   log('[TTS] 共 ' + sentences.length + ' 句，开始合成…', 'info');
+  _setTtsBtn('play');  // 合成中先显示按钮（可点停止）
 
-  // 每句独立 fetch，第一句回来就开始播，后续句子排队
+  // 临时存放已合成结果（按 idx 排序）
+  const readyMap = {};
+
   const promises = sentences.map((s, i) =>
     fetchTtsAudio(s)
       .then(url => {
+        readyMap[i] = url;
+        _ttsReadyUrls = Object.keys(readyMap).sort((a,b)=>a-b).map(k => readyMap[k]);
         _ttsQueue.push({ idx: i, url });
-        // 按序重排（fetch并发但要顺序播放）
         _ttsQueue.sort((a, b) => a.idx - b.idx);
-        if (i === 0) _playNext();   // 第一句回来立刻开播
+        if (i === 0) _playNext();
         log('[TTS] 句' + (i+1) + ' 合成完成', 'ok');
       })
       .catch(err => log('[TTS] 句' + (i+1) + ' 合成失败: ' + err.message, 'err'))
   );
 
-  // 等所有句子 fetch 完成后，触发一次 playNext 以防第一句已播完
   Promise.all(promises).then(() => _playNext());
 }
 
@@ -1123,6 +1200,7 @@ async function queryKnowledge(question) {
   }
   box.textContent = '查询中…'; box.className = 'loading';
   spinner.style.display = 'block';
+  _setTtsBtn('hidden');  // 查询中隐藏按钮
   try {
     const res = await fetch(cfg.fnUrl, {
       method: 'POST',
