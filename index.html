@@ -199,7 +199,13 @@
   }
   .suggest-tags {
     display: flex; flex-wrap: wrap; gap: 7px;
+    max-height: calc(3 * (30px + 7px));
+    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .suggest-tags::-webkit-scrollbar { display: none; }
   .suggest-tag {
     display: inline-flex; align-items: center;
     padding: 5px 12px;
@@ -249,6 +255,17 @@
     text-transform: uppercase; letter-spacing: .3px;
   }
   .answer-badge svg { width: 10px; height: 10px; }
+  .play-btn {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 7px;
+    border: 1px solid var(--gray-3); background: var(--gray-1);
+    cursor: pointer; color: var(--gray-6); transition: all .15s;
+    flex-shrink: 0;
+  }
+  .play-btn.show { display: flex; }
+  .play-btn:hover { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
+  .play-btn svg { width: 13px; height: 13px; }
   .spinner {
     width: 14px; height: 14px;
     border: 2px solid var(--gray-3); border-top-color: var(--blue);
@@ -567,6 +584,9 @@
           AI 回答
         </span>
         <div class="spinner" id="answer-loading"></div>
+        <button class="play-btn" id="play-btn" onclick="replayAnswer()" title="播放回答">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>
+        </button>
       </div>
     </div>
     <div id="answer-box" class="empty">等待提问…</div>
@@ -1075,6 +1095,14 @@ function renderTranscript() {
 }
 
 // ─── TTS 分句播放 ─────────────────────────────────────────────────────────────
+let _lastAnswer = '';
+
+function replayAnswer() {
+  if (!_lastAnswer) return;
+  const cfg = getConfig();
+  if (!cfg.ttsUrl) return;
+  speakText(_lastAnswer);
+}
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY';
 
 let _ttsQueue   = [];   // 待播句子
@@ -1175,6 +1203,8 @@ async function queryKnowledge(question) {
     if (data.error) throw new Error(data.error);
     box.textContent = data.answer; box.className = '';
     log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
+    _lastAnswer = data.answer;
+    document.getElementById('play-btn').classList.add('show');
     // 有回答就触发 TTS
     if (data.answer && cfg.ttsUrl) {
       log('[TTS] 触发播报，ttsUrl=' + cfg.ttsUrl, 'info');
