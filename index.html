@@ -128,18 +128,6 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="block text-xs text-muted mb-1 font-mono">Supabase URL</label>
-        <input id="cfg-sb-url" type="text" placeholder="https://xxx.supabase.co"
-          class="w-full border border-line rounded px-3 py-2 text-sm bg-white font-mono focus:outline-none focus:border-accent" />
-      </div>
-      <div>
-        <label class="block text-xs text-muted mb-1 font-mono">Edge Function URL</label>
-        <input id="cfg-fn-url" type="text" placeholder="https://xxx.supabase.co/functions/v1/query"
-          class="w-full border border-line rounded px-3 py-2 text-sm bg-white font-mono focus:outline-none focus:border-accent" />
-      </div>
-    </div>
     <div class="pt-1">
       <button id="save-btn" onclick="saveConfig()"
         class="text-xs font-mono border border-accent text-accent hover:bg-accent hover:text-paper rounded px-3 py-1.5 transition-colors">
@@ -299,22 +287,29 @@ async function buildAsrUrl(cfg) {
 }
 
 // ─── 配置持久化 ───────────────────────────────────────────────────────────────
+// 默认值常量
+const DEFAULTS = {
+  appid:     '1410742121',
+  secretid:  'AKIDCURHwUzUuSyUxFPM9j6GEzXstjLly0pR',
+  secretkey: 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25',
+  sbUrl:     'https://cgtrlucacjrbtazidixn.supabase.co',
+  fnUrl:     'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query',
+  engine:    '16k_zh',
+  vad:       true,
+  punc:      false,
+};
+
 function loadConfig() {
   try {
-    const c = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
-    if (c.appid)    document.getElementById('cfg-appid').value    = c.appid;
-    else            document.getElementById('cfg-appid').value    = '1410742121';
-    if (c.secretid) document.getElementById('cfg-secretid').value = c.secretid;
-    else            document.getElementById('cfg-secretid').value = 'AKIDCURHwUzUuSyUxFPM9j6GEzXstjLly0pR';
-    if (c.secretkey)document.getElementById('cfg-secretkey').value= c.secretkey;
-    else            document.getElementById('cfg-secretkey').value= 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25';
-    if (c.sbUrl)    document.getElementById('cfg-sb-url').value   = c.sbUrl;
-    else            document.getElementById('cfg-sb-url').value   = 'https://cgtrlucacjrbtazidixn.supabase.co';
-    if (c.fnUrl)    document.getElementById('cfg-fn-url').value   = c.fnUrl;
-    else            document.getElementById('cfg-fn-url').value   = 'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query';
-    if (c.engine)   document.getElementById('cfg-engine').value   = c.engine;
-    if (c.vad    !== undefined) document.getElementById('cfg-vad').checked  = c.vad;
-    if (c.punc   !== undefined) document.getElementById('cfg-punc').checked = c.punc;
+    const saved = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
+    const c = { ...DEFAULTS, ...saved };  // 默认值兜底，localStorage 优先
+    document.getElementById('cfg-appid').value     = c.appid;
+    document.getElementById('cfg-secretid').value  = c.secretid;
+    document.getElementById('cfg-secretkey').value = c.secretkey;
+
+    document.getElementById('cfg-engine').value    = c.engine;
+    document.getElementById('cfg-vad').checked     = c.vad;
+    document.getElementById('cfg-punc').checked    = c.punc;
   } catch (e) {}
 }
 
@@ -334,8 +329,8 @@ function getConfig() {
     engine:    document.getElementById('cfg-engine').value,
     vad:       document.getElementById('cfg-vad').checked,
     punc:      document.getElementById('cfg-punc').checked,
-    sbUrl:     document.getElementById('cfg-sb-url').value.trim(),
-    fnUrl:     document.getElementById('cfg-fn-url').value.trim(),
+    sbUrl:     DEFAULTS.sbUrl,
+    fnUrl:     DEFAULTS.fnUrl,
   };
 }
 
