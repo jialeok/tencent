@@ -187,26 +187,7 @@
     text-transform: uppercase; letter-spacing: .6px;
   }
 
-  /* ── Transcript ─────────────────────────────────────────── */
-  .transcript-wrap { padding: 16px; }
-  .transcript-box {
-    min-height: 72px;
-    padding: 12px 14px;
-    border: 1px solid var(--gray-3);
-    border-radius: 8px;
-    background: var(--gray-1);
-    font-size: 15px; line-height: 1.8; color: var(--gray-8);
-  }
-  .transcript-box:empty::before {
-    content: '按住下方按钮开始说话，或切换为文字输入…';
-    color: var(--gray-4); font-size: 14px;
-  }
-  .seg-stable  { color: var(--gray-9); }
-  .seg-interim { color: var(--gray-5); border-bottom: 1.5px dashed var(--blue); }
-  .transcript-footer {
-    display: flex; align-items: center; gap: 8px; margin-top: 8px;
-  }
-  .word-count { margin-left: auto; font-size: 12px; color: var(--gray-5); }
+
 
   /* ── Waveform (inline, shown when recording) ────────────── */
   .waveform {
@@ -344,6 +325,47 @@
   /* voice mode: placeholder spacer */
   .voice-mode-spacer { flex: 1; }
 
+  /* ── Transcript strip (inside bottom bar) ──────────────── */
+  .transcript-strip {
+    display: none;
+    border-top: 1px solid var(--gray-2);
+    background: var(--gray-0);
+  }
+  .transcript-strip.has-text,
+  .transcript-strip.recording {
+    display: block;
+  }
+  .transcript-strip-inner {
+    padding: 10px 12px 8px;
+  }
+  .transcript-box {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--gray-8);
+    min-height: 0;
+    word-break: break-all;
+  }
+  .transcript-box:empty::before {
+    content: '识别中…';
+    color: var(--gray-4);
+    font-style: italic;
+    font-size: 13px;
+  }
+  .seg-stable  { color: var(--gray-9); }
+  .seg-interim { color: var(--blue); opacity: .7; }
+  .transcript-strip-meta {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  }
+  .word-count { font-size: 11px; color: var(--gray-5); flex: 1; }
+  .btn-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--gray-5); transition: all .12s;
+    padding: 0;
+  }
+  .btn-icon:hover { background: var(--gray-2); color: var(--gray-7); }
+
   /* BIG press-to-talk button (voice mode) */
   .ptb-row {
     padding: 0 12px 10px;
@@ -472,28 +494,6 @@
 <!-- ── Page ──────────────────────────────────────────────────── -->
 <div class="page">
 
-  <!-- Transcript card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">识别内容</span>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <div class="waveform" id="waveform">
-          <div class="wave-bar"></div><div class="wave-bar"></div>
-          <div class="wave-bar"></div><div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="clearAll()">清空</button>
-      </div>
-    </div>
-    <div class="transcript-wrap">
-      <div class="transcript-box" id="transcript-box"></div>
-      <div class="transcript-footer">
-        <button class="btn btn-ghost btn-sm" onclick="copyTranscript()">复制</button>
-        <span class="word-count" id="word-count">0 字</span>
-      </div>
-    </div>
-  </div>
-
   <!-- Answer card -->
   <div class="card">
     <div class="card-header">
@@ -569,6 +569,32 @@
 
   </div>
 
+  <!-- transcript strip (voice mode only) -->
+  <div class="transcript-strip" id="transcript-strip">
+    <div class="transcript-strip-inner">
+      <div class="transcript-box" id="transcript-box"></div>
+      <div class="transcript-strip-meta">
+        <div class="waveform" id="waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+        <span class="word-count" id="word-count"></span>
+        <button class="btn-icon" onclick="copyTranscript()" title="复制">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+          </svg>
+        </button>
+        <button class="btn-icon" onclick="clearAll()" title="清空">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M3 4h10M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- press-to-talk row (voice mode only) -->
   <div class="ptb-row" id="ptb-row">
     <button id="ptb-btn"
@@ -639,9 +665,10 @@ function setMode(mode) {
   const isVoice = mode === 'voice';
   document.getElementById('mode-voice-btn').classList.toggle('active', isVoice);
   document.getElementById('mode-text-btn').classList.toggle('active', !isVoice);
-  document.getElementById('ptb-row').style.display     = isVoice ? '' : 'none';
-  document.getElementById('text-wrap').style.display   = isVoice ? 'none' : 'flex';
-  document.getElementById('voice-spacer').style.display = isVoice ? '' : 'none';
+  document.getElementById('ptb-row').style.display            = isVoice ? '' : 'none';
+  document.getElementById('transcript-strip').style.display   = isVoice ? '' : 'none';
+  document.getElementById('text-wrap').style.display          = isVoice ? 'none' : 'flex';
+  document.getElementById('voice-spacer').style.display       = isVoice ? '' : 'none';
   if (!isVoice) {
     setTimeout(() => document.getElementById('text-input').focus(), 50);
   }
@@ -784,17 +811,24 @@ function setPtbUI(state) {
   const btn   = document.getElementById('ptb-btn');
   const label = document.getElementById('ptb-label');
   const wf    = document.getElementById('waveform');
+  const strip = document.getElementById('transcript-strip');
   btn.classList.remove('pressed', 'connecting');
   wf.classList.remove('show');
   if (state === 'connecting') {
     btn.classList.add('connecting');
     label.textContent = '连接中…';
+    strip.classList.add('recording');
   } else if (state === 'recording') {
     btn.classList.add('pressed');
     label.textContent = '正在录音… 松开停止';
     wf.classList.add('show');
+    strip.classList.add('recording');
   } else {
     label.textContent = '按住说话';
+    strip.classList.remove('recording');
+    // keep visible if has text
+    const txt = document.getElementById('transcript-box').innerText.trim();
+    if (!txt) strip.classList.remove('has-text');
   }
 }
 
@@ -982,7 +1016,11 @@ function renderTranscript() {
     }
   }
   const text = box.innerText || '';
-  document.getElementById('word-count').textContent = `${[...text.replace(/\s/g,'')].length} 字`;
+  document.getElementById('word-count').textContent = text.trim() ? `${[...text.replace(/\s/g,'')].length} 字` : '';
+  // show strip whenever there's text
+  if (text.trim()) {
+    document.getElementById('transcript-strip').classList.add('has-text');
+  }
 }
 
 // ── Knowledge query ───────────────────────────────────────────────────────────
@@ -1045,10 +1083,12 @@ function copyTranscript() {
 function clearAll() {
   segments = {};
   document.getElementById('transcript-box').innerHTML = '';
-  document.getElementById('word-count').textContent = '0 字';
+  document.getElementById('word-count').textContent = '';
   document.getElementById('answer-box').textContent = '等待提问…';
   document.getElementById('answer-box').className = 'empty';
   document.getElementById('text-input').value = '';
+  const strip = document.getElementById('transcript-strip');
+  strip.classList.remove('has-text', 'recording');
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
