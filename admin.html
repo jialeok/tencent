@@ -20,26 +20,7 @@
     <span id="conn-status" class="text-xs text-gray-400 font-mono">未连接</span>
   </div>
 
-  <!-- Supabase 配置 -->
-  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-    <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">Supabase 配置</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">Supabase URL</label>
-        <input id="sb-url" type="text" placeholder="https://xxx.supabase.co"
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-400" />
-      </div>
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">Anon Key</label>
-        <input id="sb-key" type="password" placeholder="eyJ..."
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-400" />
-      </div>
-    </div>
-    <button onclick="connectSupabase()"
-      class="text-xs font-mono bg-gray-800 text-white rounded-lg px-4 py-2 hover:bg-gray-700 transition-colors">
-      连接
-    </button>
-  </div>
+
 
   <!-- 添加条目 -->
   <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
@@ -77,27 +58,16 @@
 </div>
 
 <script>
+const SB_URL = 'https://cgtrlucacjrbtazidixn.supabase.co'
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY'
 let sb = null
 
-// ── 持久化配置 ────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  const saved = JSON.parse(localStorage.getItem('kb_admin_cfg') || '{}')
-  document.getElementById('sb-url').value = saved.url || 'https://cgtrlucacjrbtazidixn.supabase.co'
-  document.getElementById('sb-key').value = saved.key || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY'
-  connectSupabase()
-})
-
-function connectSupabase() {
-  const url = document.getElementById('sb-url').value.trim()
-  const key = document.getElementById('sb-key').value.trim()
-  if (!url || !key) { alert('请填写 URL 和 Key'); return }
-
-  sb = supabase.createClient(url, key)
-  localStorage.setItem('kb_admin_cfg', JSON.stringify({ url, key }))
+  sb = supabase.createClient(SB_URL, SB_KEY)
   document.getElementById('conn-status').textContent = '已连接 ✓'
   document.getElementById('conn-status').className = 'text-xs text-green-500 font-mono'
   loadEntries()
-}
+})
 
 // ── 添加条目 ──────────────────────────────────────────────────────────────────
 async function addEntry() {
