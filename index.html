@@ -251,6 +251,7 @@
     display: flex; align-items: center; gap: 6px;
     font-size: 12px; color: var(--gray-5); cursor: pointer;
     padding: 8px 16px; user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .log-toggle:hover { color: var(--gray-7); }
   .log-caret { transition: transform .2s; }
@@ -335,6 +336,7 @@
   .transcript-strip.recording {
     display: block;
   }
+  /* when text mode hides the strip via inline style, classes are irrelevant */
   .transcript-strip-inner {
     padding: 10px 12px 8px;
   }
@@ -637,7 +639,8 @@ let _ptbActive      = false;
 
 // ── Header: click × 5 to open config ─────────────────────────────────────────
 let _titleClicks = 0, _titleTimer = null;
-document.getElementById('brand-click-target').addEventListener('click', () => {
+function _onBrandTap(e) {
+  e.preventDefault();
   _titleClicks++;
   clearTimeout(_titleTimer);
   if (_titleClicks >= 5) {
@@ -646,7 +649,9 @@ document.getElementById('brand-click-target').addEventListener('click', () => {
   } else {
     _titleTimer = setTimeout(() => { _titleClicks = 0; }, 1800);
   }
-});
+}
+document.getElementById('brand-click-target').addEventListener('click', _onBrandTap);
+document.getElementById('brand-click-target').addEventListener('touchend', _onBrandTap);
 
 function openCfg() {
   document.getElementById('cfg-overlay').classList.add('show');
@@ -665,10 +670,17 @@ function setMode(mode) {
   const isVoice = mode === 'voice';
   document.getElementById('mode-voice-btn').classList.toggle('active', isVoice);
   document.getElementById('mode-text-btn').classList.toggle('active', !isVoice);
-  document.getElementById('ptb-row').style.display            = isVoice ? '' : 'none';
-  document.getElementById('transcript-strip').style.display   = isVoice ? '' : 'none';
-  document.getElementById('text-wrap').style.display          = isVoice ? 'none' : 'flex';
-  document.getElementById('voice-spacer').style.display       = isVoice ? '' : 'none';
+  document.getElementById('ptb-row').style.display   = isVoice ? '' : 'none';
+  document.getElementById('text-wrap').style.display = isVoice ? 'none' : 'flex';
+  document.getElementById('voice-spacer').style.display = isVoice ? '' : 'none';
+  // transcript-strip visibility is controlled by CSS classes (has-text / recording)
+  // only hide it entirely when in text mode
+  const strip = document.getElementById('transcript-strip');
+  if (!isVoice) {
+    strip.style.display = 'none';
+  } else {
+    strip.style.display = '';
+  }
   if (!isVoice) {
     setTimeout(() => document.getElementById('text-input').focus(), 50);
   }
@@ -693,7 +705,8 @@ function copyLog() {
 let logOpen = false;
 function toggleLog() {
   logOpen = !logOpen;
-  document.getElementById('log-box').classList.toggle('show', logOpen);
+  const box = document.getElementById('log-box');
+  box.style.display = logOpen ? 'block' : 'none';
   document.getElementById('log-toggle').classList.toggle('open', logOpen);
 }
 
@@ -761,13 +774,15 @@ function loadConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
     const c = { ...DEFAULTS, ...saved };
-    document.getElementById('cfg-appid').value     = c.appid;
-    document.getElementById('cfg-secretid').value  = c.secretid;
-    document.getElementById('cfg-secretkey').value = c.secretkey;
-    document.getElementById('cfg-engine').value    = c.engine;
-    document.getElementById('cfg-vad').checked     = c.vad;
-    document.getElementById('cfg-punc').checked    = c.punc;
-  } catch(e) {}
+    document.getElementById('cfg-appid').value     = c.appid     || '';
+    document.getElementById('cfg-secretid').value  = c.secretid  || '';
+    document.getElementById('cfg-secretkey').value = c.secretkey || '';
+    document.getElementById('cfg-engine').value    = c.engine    || '16k_zh';
+    document.getElementById('cfg-vad').checked     = c.vad  !== false;
+    document.getElementById('cfg-punc').checked    = !!c.punc;
+  } catch(e) {
+    console.warn('[loadConfig]', e);
+  }
 }
 function saveConfig() {
   localStorage.setItem('tencent_asr_cfg', JSON.stringify(getConfig()));
