@@ -197,15 +197,17 @@
     font-size: 11px; color: var(--gray-5); margin-bottom: 8px;
     font-weight: 500; letter-spacing: .2px;
   }
+  .suggest-wrap { overflow: hidden; }
   .suggest-tags {
-    display: flex; flex-wrap: wrap; gap: 7px;
-    max-height: calc(3 * (30px + 7px));
-    overflow: hidden;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    display: flex; flex-wrap: nowrap; gap: 7px;
+    animation: scroll-tags 40s linear infinite;
+    width: max-content;
   }
-  .suggest-tags::-webkit-scrollbar { display: none; }
+  .suggest-wrap:hover .suggest-tags { animation-play-state: paused; }
+  @keyframes scroll-tags {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
   .suggest-tag {
     display: inline-flex; align-items: center;
     padding: 5px 12px;
@@ -247,7 +249,7 @@
   }
 
   /* ── Answer ─────────────────────────────────────────────── */
-  .answer-header { display: flex; align-items: center; gap: 8px; }
+  .answer-header { display: flex; align-items: center; gap: 8px; width: 100%; }
   .answer-badge {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 2px 8px; background: var(--blue-l); color: var(--blue);
@@ -258,14 +260,14 @@
   .play-btn {
     display: none;
     align-items: center; justify-content: center;
-    width: 28px; height: 28px; border-radius: 7px;
-    border: 1px solid var(--gray-3); background: var(--gray-1);
-    cursor: pointer; color: var(--gray-6); transition: all .15s;
-    flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1.5px solid var(--gray-4); background: var(--gray-2);
+    cursor: pointer; color: var(--gray-5); transition: all .15s;
+    flex-shrink: 0; margin-left: auto;
   }
   .play-btn.show { display: flex; }
-  .play-btn:hover { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
-  .play-btn svg { width: 13px; height: 13px; }
+  .play-btn:hover { background: var(--gray-3); color: var(--gray-7); }
+  .play-btn svg { width: 12px; height: 12px; }
   .spinner {
     width: 14px; height: 14px;
     border: 2px solid var(--gray-3); border-top-color: var(--blue);
@@ -584,7 +586,7 @@
           AI 回答
         </span>
         <div class="spinner" id="answer-loading"></div>
-        <button class="play-btn" id="play-btn" onclick="replayAnswer()" title="播放回答">
+        <button class="play-btn" id="play-btn" onclick="togglePlayPause()" title="播放/暂停">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>
         </button>
       </div>
@@ -1096,20 +1098,53 @@ function renderTranscript() {
 
 // ─── TTS 分句播放 ─────────────────────────────────────────────────────────────
 let _lastAnswer = '';
+let _ttsQueue   = [];
+let _ttsPlaying = false;
+let _currentAudio = null;  // 当前播放的 Audio 对象
+let _isPaused   = false;
 
-function replayAnswer() {
-  if (!_lastAnswer) return;
-  const cfg = getConfig();
-  if (!cfg.ttsUrl) return;
-  speakText(_lastAnswer);
+const ICON_PLAY  = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 2h2v12H5zm4 0h2v12H9z"/></svg>';
+
+function setPlayBtnIcon(state) {
+  // state: 'play' | 'pause'
+  const btn = document.getElementById('play-btn');
+  if (!btn) return;
+  btn.innerHTML = state === 'pause' ? ICON_PAUSE : ICON_PLAY;
 }
+
+function togglePlayPause() {
+  if (!_lastAnswer) return;
+  if (_isPaused) {
+    // 恢复：重新从头播
+    _isPaused = false;
+    setPlayBtnIcon('pause');
+    speakText(_lastAnswer);
+    return;
+  }
+  // 暂停：停止当前播放
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio = null;
+  }
+  _ttsQueue   = [];
+  _ttsPlaying = false;
+  _isPaused   = true;
+  setPlayBtnIcon('play');
+}
+
+function _ttsFinished() {
+  _ttsPlaying = false;
+  _currentAudio = null;
+  if (_ttsQueue.length === 0 && !_isPaused) {
+    // 全部播完，回到播放图标（点击重播）
+    setPlayBtnIcon('play');
+  }
+}
+
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY';
 
-let _ttsQueue   = [];   // 待播句子
-let _ttsPlaying = false;
-
 function splitSentences(text) {
-  // 按句末标点切分，保留标点，过滤空串
   return text.split(/(?<=[。！？!?…]+)/).map(s => s.trim()).filter(s => s.length > 0);
 }
 
@@ -1125,7 +1160,6 @@ async function fetchTtsAudio(text) {
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  // base64 mp3 → blob URL
   const binary = atob(data.audio);
   const bytes  = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -1133,26 +1167,28 @@ async function fetchTtsAudio(text) {
 }
 
 async function _playNext() {
-  if (_ttsPlaying || _ttsQueue.length === 0) return;
+  if (_ttsPlaying || _isPaused || _ttsQueue.length === 0) return;
   _ttsPlaying = true;
   const { url } = _ttsQueue.shift();
   const audio   = new Audio(url);
+  _currentAudio = audio;
   audio.onended = () => {
     URL.revokeObjectURL(url);
-    _ttsPlaying = false;
+    _ttsFinished();
     _playNext();
   };
   audio.onerror = () => {
-    _ttsPlaying = false;
+    _ttsFinished();
     _playNext();
   };
-  audio.play().catch(() => { _ttsPlaying = false; _playNext(); });
+  audio.play().catch(() => { _ttsFinished(); _playNext(); });
 }
 
 // 主入口：把文本分句，并发预取，顺序播放
 async function speakText(text) {
   _ttsQueue   = [];
   _ttsPlaying = false;
+  _isPaused   = false;
 
   const sentences = splitSentences(text);
   if (sentences.length === 0) return;
@@ -1204,7 +1240,9 @@ async function queryKnowledge(question) {
     box.textContent = data.answer; box.className = '';
     log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
     _lastAnswer = data.answer;
+    _isPaused = false;
     document.getElementById('play-btn').classList.add('show');
+    setPlayBtnIcon('pause');
     // 有回答就触发 TTS
     if (data.answer && cfg.ttsUrl) {
       log('[TTS] 触发播报，ttsUrl=' + cfg.ttsUrl, 'info');
@@ -1273,9 +1311,11 @@ async function loadSuggestQuestions() {
 
     const wrap = document.getElementById('suggest-wrap');
     const tags = document.getElementById('suggest-tags');
-    tags.innerHTML = data.map(r =>
+    const items = data.map(r =>
       `<button class="suggest-tag" onclick="askSuggest(this)">${escSuggest(r.question)}</button>`
     ).join('');
+    // 复制一份实现无缝循环
+    tags.innerHTML = items + items;
     wrap.classList.remove('hidden');
   } catch(e) { /* 静默失败，不影响主功能 */ }
 }
