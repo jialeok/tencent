@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>外贸知识库 · 智能查询</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue:   #1a56db;
+    --blue-l: #e8effd;
+    --blue-d: #1240a8;
+    --green:  #057a55;
+    --red:    #e02424;
+    --amber:  #c27803;
+    --gray-0: #ffffff;
+    --gray-1: #f9fafb;
+    --gray-2: #f3f4f6;
+    --gray-3: #e5e7eb;
+    --gray-4: #d1d5db;
+    --gray-5: #9ca3af;
+    --gray-6: #6b7280;
+    --gray-7: #374151;
+    --gray-8: #1f2937;
+    --gray-9: #111827;
+    --radius: 10px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    --shadow:    0 4px 12px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.05);
+    --shadow-lg: 0 12px 32px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.06);
+    --bottom-bar: 66px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 15px; }
+  body {
+    font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+    background: var(--gray-1);
+    color: var(--gray-9);
+    min-height: 100vh;
+    padding-bottom: var(--bottom-bar);
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  .header {
+    background: var(--gray-0);
+    border-bottom: 1px solid var(--gray-3);
+    padding: 0 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: default;
+    user-select: none;
+  }
+  .brand-icon {
+    width: 28px; height: 28px;
+    background: var(--blue);
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .brand-icon svg { width: 15px; height: 15px; color: #fff; }
+  .brand-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-9);
+    letter-spacing: -.2px;
+  }
+  .brand-divider { width: 1px; height: 16px; background: var(--gray-3); }
+  .brand-sub { font-size: 12px; color: var(--gray-5); }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: var(--gray-2);
+    border-radius: 20px;
+    font-size: 12px; color: var(--gray-6); font-weight: 500;
+    flex-shrink: 0;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--gray-4); transition: background .3s;
+  }
+  .status-dot.connected { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+  .status-dot.waiting   { background: var(--amber); }
+  .status-dot.error     { background: var(--red); }
+
+  /* ── Config modal overlay ───────────────────────────────── */
+  .cfg-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.4);
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 64px;
+    animation: fade-in .15s ease;
+  }
+  .cfg-overlay.show { display: flex; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .cfg-modal {
+    background: var(--gray-0);
+    border-radius: 14px;
+    box-shadow: var(--shadow-lg);
+    width: calc(100% - 32px);
+    max-width: 640px;
+    overflow: hidden;
+    animation: slide-down .18s ease;
+  }
+  @keyframes slide-down {
+    from { transform: translateY(-10px); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+  }
+  .cfg-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--gray-2);
+  }
+  .cfg-modal-title { font-size: 14px; font-weight: 600; color: var(--gray-8); }
+  .cfg-close {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--gray-2); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--gray-6); font-size: 16px; line-height: 1;
+    transition: background .15s;
+  }
+  .cfg-close:hover { background: var(--gray-3); }
+  .cfg-body { padding: 20px; }
+
+  /* ── Config fields ──────────────────────────────────────── */
+  .cfg-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .cfg-grid-2 { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+  @media (max-width: 540px) {
+    .cfg-grid { grid-template-columns: 1fr; }
+    .cfg-grid-2 { grid-template-columns: 1fr; }
+  }
+  .field label {
+    display: block;
+    font-size: 11px; font-weight: 600; color: var(--gray-5);
+    margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+  }
+  .field input, .field select {
+    width: 100%; height: 36px;
+    border: 1px solid var(--gray-3); border-radius: 7px;
+    padding: 0 10px; font-size: 13px; font-family: inherit;
+    color: var(--gray-8); background: var(--gray-0); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(26,86,219,.12);
+  }
+  .field-row { display: flex; align-items: center; gap: 20px; padding-top: 4px; }
+  .toggle-label {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 13px; color: var(--gray-7); cursor: pointer; user-select: none;
+  }
+  .toggle-label input[type=checkbox] { accent-color: var(--blue); width: 14px; height: 14px; cursor: pointer; }
+  .cfg-footer { margin-top: 16px; display: flex; align-items: center; }
+  .save-ok { font-size: 12px; color: var(--green); font-weight: 500; display: none; margin-left: 8px; }
+
+  /* ── Page content ───────────────────────────────────────── */
+  .page { max-width: 700px; margin: 0 auto; padding: 20px 16px 24px; }
+
+  /* ── Card ───────────────────────────────────────────────── */
+  .card {
+    background: var(--gray-0);
+    border: 1px solid var(--gray-3);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .card-header {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--gray-2);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title {
+    font-size: 11px; font-weight: 600; color: var(--gray-5);
+    text-transform: uppercase; letter-spacing: .6px;
+  }
+
+
+
+  /* ── 推荐问题胶囊 ───────────────────────────────────────── */
+  .suggest-wrap {
+    margin-bottom: 14px;
+  }
+  .suggest-label {
+    font-size: 11px; color: var(--gray-5); margin-bottom: 8px;
+    font-weight: 500; letter-spacing: .2px;
+  }
+  .suggest-wrap { overflow: hidden; }
+  .suggest-tags {
+    display: grid;
+    grid-template-rows: repeat(3, auto);
+    grid-auto-flow: column;
+    gap: 7px;
+    width: max-content;
+    animation: scroll-tags 45s linear infinite;
+  }
+  .suggest-wrap:hover .suggest-tags { animation-play-state: paused; }
+  @keyframes scroll-tags {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .suggest-tag {
+    display: inline-flex; align-items: center;
+    padding: 5px 12px;
+    background: var(--gray-0);
+    border: 1px solid var(--gray-3);
+    border-radius: 20px;
+    font-size: 13px; color: var(--gray-7);
+    cursor: pointer;
+    transition: all .12s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .suggest-tag:hover,
+  .suggest-tag:active {
+    background: var(--blue-l);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .suggest-wrap.hidden { display: none; }
+
+
+  .waveform {
+    display: none; align-items: flex-end; gap: 3px; height: 20px;
+    margin-left: 8px;
+  }
+  .waveform.show { display: flex; }
+  .wave-bar {
+    width: 3px; border-radius: 2px; background: var(--blue);
+    animation: wave-anim .7s ease-in-out infinite;
+  }
+  .wave-bar:nth-child(1) { animation-delay: 0s;   height: 6px; }
+  .wave-bar:nth-child(2) { animation-delay: .1s;  height: 14px; }
+  .wave-bar:nth-child(3) { animation-delay: .2s;  height: 20px; }
+  .wave-bar:nth-child(4) { animation-delay: .1s;  height: 14px; }
+  .wave-bar:nth-child(5) { animation-delay: 0s;   height: 6px; }
+  @keyframes wave-anim {
+    0%, 100% { transform: scaleY(.35); }
+    50%       { transform: scaleY(1); }
+  }
+
+  /* ── Answer ─────────────────────────────────────────────── */
+  .answer-header { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .answer-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; background: var(--blue-l); color: var(--blue);
+    border-radius: 20px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .3px;
+  }
+  .answer-badge svg { width: 10px; height: 10px; }
+  .play-btn {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1.5px solid var(--gray-4); background: var(--gray-2);
+    cursor: pointer; color: var(--gray-5); transition: all .15s;
+    flex-shrink: 0; margin-left: auto;
+  }
+  .play-btn.show { display: flex; }
+  .play-btn:hover { background: var(--gray-3); color: var(--gray-7); }
+  .play-btn svg { width: 12px; height: 12px; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--gray-3); border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin .7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #answer-box {
+    min-height: 56px; font-size: 14px; line-height: 1.8;
+    color: var(--gray-7); white-space: pre-wrap; padding: 14px 16px;
+  }
+  #answer-box.empty   { color: var(--gray-4); font-style: italic; }
+  #answer-box.loading { color: var(--gray-5); font-style: italic; }
+  #answer-box.error   { color: var(--red); }
+
+  /* ── Buttons (general) ──────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 34px; padding: 0 14px; border-radius: 7px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    cursor: pointer; border: none; transition: all .15s; white-space: nowrap;
+  }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:hover { background: var(--blue-d); }
+  .btn-ghost { background: transparent; color: var(--gray-6); border: 1px solid var(--gray-3); }
+  .btn-ghost:hover { background: var(--gray-2); color: var(--gray-8); border-color: var(--gray-4); }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+
+  /* ── Log (collapsible) ──────────────────────────────────── */
+  .log-toggle {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--gray-5); cursor: pointer;
+    padding: 8px 16px; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .log-toggle:hover { color: var(--gray-7); }
+  .log-caret { transition: transform .2s; }
+  .log-toggle.open .log-caret { transform: rotate(90deg); }
+  #log-box {
+    display: none;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11px; background: var(--gray-9);
+    color: rgba(255,255,255,.55); padding: 10px 14px;
+    height: 120px; overflow-y: auto; line-height: 1.7;
+    border-top: 1px solid var(--gray-8);
+  }
+  #log-box.show { display: block; }
+  .log-ok   { color: #4ade80; }
+  .log-err  { color: #f87171; }
+  .log-info { color: rgba(255,255,255,.4); }
+
+  /* ══════════════════════════════════════════════════════════
+     TRANSCRIPT STRIP (now in page, above AI answer)
+  ══════════════════════════════════════════════════════════ */
+  .transcript-strip {
+    display: none;
+    background: var(--gray-0);
+    border: 1px solid var(--gray-3);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .transcript-strip.has-text,
+  .transcript-strip.recording {
+    display: block;
+  }
+  .transcript-strip-inner {
+    padding: 10px 14px 8px;
+  }
+  .transcript-box {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--gray-8);
+    min-height: 0;
+    word-break: break-all;
+  }
+  .transcript-box:empty::before {
+    content: '识别中…';
+    color: var(--gray-4);
+    font-style: italic;
+    font-size: 13px;
+  }
+  .seg-stable  { color: var(--gray-9); }
+  .seg-interim { color: var(--blue); opacity: .7; }
+  .transcript-strip-meta {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  }
+  .word-count { font-size: 11px; color: var(--gray-5); flex: 1; }
+  .btn-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--gray-5); transition: all .12s;
+    padding: 0;
+  }
+  .btn-icon:hover { background: var(--gray-2); color: var(--gray-7); }
+
+  /* ══════════════════════════════════════════════════════════
+     BOTTOM BAR  — single row: [PTB btn grow] [kbd toggle]
+  ══════════════════════════════════════════════════════════ */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 150;
+    background: var(--gray-0);
+    border-top: 1px solid var(--gray-3);
+    box-shadow: 0 -2px 12px rgba(0,0,0,.06);
+    padding: 10px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* mode toggle btn (keyboard icon, right side) */
+  .mode-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 46px; height: 46px; border-radius: 10px;
+    border: 1.5px solid var(--gray-3); background: var(--gray-1);
+    cursor: pointer; transition: all .15s; flex-shrink: 0;
+    color: var(--gray-6);
+  }
+  .mode-btn svg { width: 18px; height: 18px; }
+  .mode-btn:hover { background: var(--gray-2); border-color: var(--gray-4); color: var(--gray-8); }
+  .mode-btn.active { background: var(--blue-l); border-color: var(--blue); color: var(--blue); }
+
+  /* text input area (shown in text mode) */
+  .text-input-wrap {
+    flex: 1; display: flex; gap: 8px; align-items: center;
+  }
+  #text-input {
+    flex: 1; height: 46px; padding: 0 12px;
+    border: 1.5px solid var(--gray-3); border-radius: 10px;
+    font-size: 14px; font-family: inherit;
+    color: var(--gray-8); background: var(--gray-1); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #text-input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(26,86,219,.10);
+    background: var(--gray-0);
+  }
+  #text-input::placeholder { color: var(--gray-4); }
+  #send-btn {
+    width: 46px; height: 46px; border-radius: 10px; flex-shrink: 0;
+    background: var(--blue); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  #send-btn:hover { background: var(--blue-d); }
+  #send-btn svg { width: 16px; height: 16px; color: #fff; }
+
+  /* ── Press-to-talk button (fills flex, voice mode) ──────── */
+  .ptb-row {
+    flex: 1;
+    display: flex;
+  }
+
+  #ptb-btn {
+    flex: 1; height: 46px;
+    border-radius: 10px;
+    border: 1.5px solid var(--gray-3);
+    background: var(--gray-1);
+    font-family: inherit; font-size: 15px; font-weight: 500;
+    color: var(--gray-7);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all .12s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+  #ptb-btn svg { width: 17px; height: 17px; flex-shrink: 0; transition: color .12s; }
+  #ptb-btn:hover:not(.pressed) {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: var(--blue-l);
+  }
+  #ptb-btn.connecting {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: #fffbeb;
+  }
+  #ptb-btn.pressed {
+    background: var(--blue);
+    border-color: var(--blue-d);
+    color: #fff;
+    transform: scale(.985);
+    box-shadow: 0 2px 8px rgba(26,86,219,.35);
+  }
+  #ptb-btn.pressed svg { color: #fff; }
+  #ptb-btn::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,.25);
+    opacity: 0; transition: opacity .1s;
+  }
+  #ptb-btn.pressed::after { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand" id="brand-click-target" title="">
+    <div class="brand-icon">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="10" cy="10" r="7"/>
+        <path d="M7 9.5c0-1.7 1.3-3 3-3s3 1.3 3 3c0 1.4-.9 2.5-2.1 2.9V15"/>
+        <circle cx="10" cy="17" r=".8" fill="currentColor" stroke="none"/>
+      </svg>
+    </div>
+    <span class="brand-name">外贸知识库</span>
+    <div class="brand-divider"></div>
+    <span class="brand-sub">智能查询</span>
+  </div>
+  <div class="status-pill">
+    <div id="status-dot" class="status-dot"></div>
+    <span id="status-text">待机</span>
+  </div>
+</header>
+
+<!-- ── Config modal (hidden, unlocked by title click×5) ─────── -->
+<div class="cfg-overlay" id="cfg-overlay" onclick="closeCfgIfOutside(event)">
+  <div class="cfg-modal">
+    <div class="cfg-modal-header">
+      <span class="cfg-modal-title">识别配置</span>
+      <button class="cfg-close" onclick="closeCfg()">×</button>
+    </div>
+    <div class="cfg-body">
+      <div class="cfg-grid">
+        <div class="field">
+          <label>AppID</label>
+          <input id="cfg-appid" type="text" placeholder="1234567890" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>SecretID</label>
+          <input id="cfg-secretid" type="text" placeholder="AKIDxxx" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>SecretKey</label>
+          <input id="cfg-secretkey" type="password" placeholder="••••••••" autocomplete="off" />
+        </div>
+      </div>
+      <div class="cfg-grid-2">
+        <div class="field">
+          <label>识别引擎</label>
+          <select id="cfg-engine">
+            <option value="16k_zh">16k_zh — 中文通用</option>
+            <option value="16k_zh_large">16k_zh_large — 普方英大模型</option>
+            <option value="16k_zh_en">16k_zh_en — 中英粤大模型</option>
+            <option value="16k_en">16k_en — 英文</option>
+            <option value="8k_zh">8k_zh — 电话中文</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label class="toggle-label">
+            <input id="cfg-vad" type="checkbox" checked /> 开启 VAD
+          </label>
+          <label class="toggle-label">
+            <input id="cfg-punc" type="checkbox" /> 过滤句号
+          </label>
+        </div>
+      </div>
+      <div class="cfg-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveConfig()">保存配置</button>
+        <span id="save-ok" class="save-ok">✓ 已保存</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Page ──────────────────────────────────────────────────── -->
+<div class="page" id="page-area">
+
+  <!-- 推荐问题胶囊（从数据库加载） -->
+  <div class="suggest-wrap hidden" id="suggest-wrap">
+    <div class="suggest-label">你可以这样问：</div>
+    <div class="suggest-tags" id="suggest-tags"></div>
+  </div>
+
+  <!-- Transcript strip (shown when recording or has text) -->
+  <div class="transcript-strip" id="transcript-strip">
+    <div class="transcript-strip-inner">
+      <div class="transcript-box" id="transcript-box"></div>
+      <div class="transcript-strip-meta">
+        <div class="waveform" id="waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+        <span class="word-count" id="word-count"></span>
+        <button class="btn-icon" onclick="copyTranscript()" title="复制">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+          </svg>
+        </button>
+        <button class="btn-icon" onclick="clearAll()" title="清空">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M3 4h10M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Answer card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="answer-header">
+        <span class="answer-badge">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a6 6 0 1 0 0 12A6 6 0 0 0 8 1zm.75 9.25h-1.5v-1.5h1.5v1.5zm0-3h-1.5V4.75h1.5v2.5z"/>
+          </svg>
+          AI 回答
+        </span>
+        <div class="spinner" id="answer-loading"></div>
+        <button class="play-btn" id="play-btn" onclick="togglePlayPause()" title="播放/暂停">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="answer-box" class="empty">等待提问…</div>
+  </div>
+
+  <!-- Log (collapsed by default) -->
+  <div class="card" style="margin-bottom:0;">
+    <div class="log-toggle" id="log-toggle" onclick="toggleLog()">
+      <svg class="log-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M4 2l4 4-4 4"/>
+      </svg>
+      系统日志
+      <span style="margin-left:auto;display:flex;gap:10px;">
+        <span onclick="event.stopPropagation();copyLog()" style="cursor:pointer;text-decoration:underline;">复制</span>
+        <span onclick="event.stopPropagation();clearLog()" style="cursor:pointer;text-decoration:underline;">清空</span>
+      </span>
+    </div>
+    <div id="log-box">
+      <div class="log-info">— 就绪 —</div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- ══════════════════════════════════════════════════════════
+     BOTTOM BAR — single row
+══════════════════════════════════════════════════════════ -->
+<div class="bottom-bar">
+
+  <!-- voice mode: [PTB btn] [kbd toggle] -->
+  <div class="ptb-row" id="ptb-row">
+    <button id="ptb-btn"
+      onmousedown="ptbStart(event)"
+      onmouseup="ptbStop(event)"
+      onmouseleave="ptbStopIfActive(event)"
+      ontouchstart="ptbStart(event)"
+      ontouchend="ptbStop(event)"
+      ontouchcancel="ptbStop(event)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="8"  y1="22" x2="16" y2="22"/>
+      </svg>
+      <span id="ptb-label">按住说话</span>
+    </button>
+  </div>
+
+  <!-- text mode: [input] [send] — hidden initially -->
+  <div class="text-input-wrap" id="text-wrap" style="display:none;">
+    <input id="text-input" type="text" placeholder="输入问题，按回车发送…" />
+    <button id="send-btn" onclick="manualQuery()" title="发送">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 10l14-7-6 14-2-5-6-2z" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- toggle btn: keyboard icon, voice mode only -->
+  <button class="mode-btn" id="mode-toggle-btn" onclick="toggleMode()" title="切换输入方式">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="M7 15V9m5 6V9m5 6V9M3 11h18"/>
+    </svg>
+  </button>
+
+</div>
+
+<script>
+// ─── 常量 ─────────────────────────────────────────────────────────────────────
+const PCM_CHUNK_MS  = 200;
+const SAMPLE_RATE   = 16000;
+const CHUNK_SAMPLES = SAMPLE_RATE * PCM_CHUNK_MS / 1000;
+const ASR_HOST      = 'asr.cloud.tencent.com';
+
+// ─── 状态 ─────────────────────────────────────────────────────────────────────
+let ws              = null;
+let audioCtx        = null;
+let mediaStream     = null;
+let scriptProcessor = null;
+let pcmBuffer       = new Int16Array(0);
+let sendInterval    = null;
+let isRecording     = false;
+let segments        = {};
+let _wsCloseExpected = false;
+let _ptbActive      = false;
+
+// ─── 配置默认值 ───────────────────────────────────────────────────────────────
+const DEFAULTS = {
+  appid:     '1410742121',
+  secretid:  'AKIDCURHwUzUuSyUxFPM9j6GEzXstjLly0pR',
+  secretkey: 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25',
+  sbUrl:     'https://cgtrlucacjrbtazidixn.supabase.co',
+  fnUrl:     'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query',
+  ttsUrl:    'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/tts',
+  engine:    '16k_zh',
+  vad:       true,
+  punc:      false,
+};
+
+// ─── 标题点5下开配置 ──────────────────────────────────────────────────────────
+let _titleClicks = 0, _titleTimer = null;
+function _onBrandTap(e) {
+  if (e.type === 'touchend') e.preventDefault(); // 防止 touch→click 双触发
+  _titleClicks++;
+  clearTimeout(_titleTimer);
+  if (_titleClicks >= 5) {
+    _titleClicks = 0;
+    openCfg();
+  } else {
+    _titleTimer = setTimeout(() => { _titleClicks = 0; }, 1800);
+  }
+}
+document.getElementById('brand-click-target').addEventListener('click',    _onBrandTap);
+document.getElementById('brand-click-target').addEventListener('touchend', _onBrandTap);
+
+function openCfg()  { document.getElementById('cfg-overlay').classList.add('show'); }
+function closeCfg() { document.getElementById('cfg-overlay').classList.remove('show'); }
+function closeCfgIfOutside(e) {
+  if (e.target === document.getElementById('cfg-overlay')) closeCfg();
+}
+
+// ─── 模式切换 (语音 / 文字) ───────────────────────────────────────────────────
+let currentMode = 'voice';
+function setMode(mode) {
+  currentMode = mode;
+  const isVoice = mode === 'voice';
+  document.getElementById('ptb-row').style.display        = isVoice ? 'flex' : 'none';
+  document.getElementById('text-wrap').style.display      = isVoice ? 'none' : 'flex';
+  document.getElementById('mode-toggle-btn').style.display = isVoice ? '' : 'none';
+  // transcript-strip 文字模式下隐藏，语音模式由 CSS class 控制
+  document.getElementById('transcript-strip').style.display = isVoice ? '' : 'none';
+  if (!isVoice) setTimeout(() => document.getElementById('text-input').focus(), 50);
+}
+function toggleMode() {
+  setMode(currentMode === 'voice' ? 'text' : 'voice');
+}
+
+// ─── 日志 ─────────────────────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const box = document.getElementById('log-box');
+  const d   = document.createElement('div');
+  d.className = 'log-' + type;
+  d.textContent = '[' + new Date().toTimeString().slice(0,8) + '] ' + msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function clearLog() { document.getElementById('log-box').innerHTML = ''; }
+function copyLog() {
+  const lines = Array.from(document.getElementById('log-box').children)
+    .map(el => el.textContent).join('\n');
+  navigator.clipboard.writeText(lines).then(() => log('日志已复制', 'ok'));
+}
+let logOpen = false;
+function toggleLog() {
+  logOpen = !logOpen;
+  document.getElementById('log-box').style.display = logOpen ? 'block' : 'none';
+  document.getElementById('log-toggle').classList.toggle('open', logOpen);
+}
+
+// ─── 状态指示 ─────────────────────────────────────────────────────────────────
+function setStatus(text, state) {
+  document.getElementById('status-text').textContent = text;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (state ? ' ' + state : '');
+}
+
+// ─── 签名生成 (浏览器端 HMAC-SHA1) ───────────────────────────────────────────
+async function buildAsrUrl(cfg) {
+  const appid     = cfg.appid;
+  const secretId  = cfg.secretid;
+  const secretKey = cfg.secretkey;
+  if (!appid || !secretId || !secretKey) throw new Error('请先配置 AppID / SecretID / SecretKey');
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const expired   = timestamp + 86400;
+  const nonce     = Math.floor(Math.random() * 1e9);
+  const voiceId   = crypto.randomUUID();
+
+  const params = {
+    engine_model_type: cfg.engine,
+    expired,
+    filter_punc: cfg.punc ? 1 : 0,
+    needvad:     cfg.vad  ? 1 : 0,
+    nonce,
+    secretid:    secretId,
+    timestamp,
+    voice_format: 1,
+    voice_id:    voiceId,
+    word_info:   0,
+  };
+
+  const sortedKeys = Object.keys(params).sort();
+  const signStr = ASR_HOST + '/asr/v2/' + appid + '?' +
+    sortedKeys.map(k => k + '=' + params[k]).join('&');
+  log('[签名] 原串: ' + signStr.slice(0, 80) + '…', 'info');
+
+  const enc     = new TextEncoder();
+  const keyData = await crypto.subtle.importKey(
+    'raw', enc.encode(secretKey),
+    { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
+  );
+  const sigBuf    = await crypto.subtle.sign('HMAC', keyData, enc.encode(signStr));
+  const sigB64    = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
+  const signature = encodeURIComponent(sigB64);
+  const query     = sortedKeys.map(k => k + '=' + encodeURIComponent(params[k])).join('&')
+                    + '&signature=' + signature;
+  return 'wss://' + ASR_HOST + '/asr/v2/' + appid + '?' + query;
+}
+
+// ─── 配置持久化 ───────────────────────────────────────────────────────────────
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
+    const c = { ...DEFAULTS, ...saved };
+    document.getElementById('cfg-appid').value     = c.appid     || '';
+    document.getElementById('cfg-secretid').value  = c.secretid  || '';
+    document.getElementById('cfg-secretkey').value = c.secretkey || '';
+    document.getElementById('cfg-engine').value    = c.engine    || '16k_zh';
+    document.getElementById('cfg-vad').checked     = c.vad  !== false;
+    document.getElementById('cfg-punc').checked    = !!c.punc;
+  } catch(e) { console.warn('[loadConfig]', e); }
+}
+function saveConfig() {
+  localStorage.setItem('tencent_asr_cfg', JSON.stringify(getConfig()));
+  const ok = document.getElementById('save-ok');
+  ok.style.display = 'inline';
+  setTimeout(() => { ok.style.display = 'none'; }, 2000);
+}
+function getConfig() {
+  return {
+    appid:     document.getElementById('cfg-appid').value.trim(),
+    secretid:  document.getElementById('cfg-secretid').value.trim(),
+    secretkey: document.getElementById('cfg-secretkey').value.trim(),
+    engine:    document.getElementById('cfg-engine').value,
+    vad:       document.getElementById('cfg-vad').checked,
+    punc:      document.getElementById('cfg-punc').checked,
+    sbUrl:     DEFAULTS.sbUrl,
+    fnUrl:     DEFAULTS.fnUrl,
+    ttsUrl:    DEFAULTS.ttsUrl,
+  };
+}
+
+// ─── PTB UI 状态 ──────────────────────────────────────────────────────────────
+function setPtbUI(state) {
+  const btn   = document.getElementById('ptb-btn');
+  const label = document.getElementById('ptb-label');
+  const wf    = document.getElementById('waveform');
+  const strip = document.getElementById('transcript-strip');
+  btn.classList.remove('pressed', 'connecting');
+  wf.classList.remove('show');
+  if (state === 'connecting') {
+    btn.classList.add('connecting');
+    label.textContent = '连接中…';
+    strip.classList.add('recording');
+  } else if (state === 'recording') {
+    btn.classList.add('pressed');
+    label.textContent = '正在录音… 松开停止';
+    wf.classList.add('show');
+    strip.classList.add('recording');
+  } else {
+    label.textContent = '按住说话';
+    strip.classList.remove('recording');
+    const txt = document.getElementById('transcript-box').innerText.trim();
+    if (!txt) strip.classList.remove('has-text');
+  }
+}
+
+// ─── 长按说话事件 ─────────────────────────────────────────────────────────────
+function ptbStart(e) {
+  e.preventDefault();
+  if (_ptbActive) return;
+  _ptbActive = true;
+  setPtbUI('connecting');
+  startRecording();
+}
+function ptbStop(e) {
+  e.preventDefault();
+  if (!_ptbActive) return;
+  _ptbActive = false;
+  if (isRecording) {
+    stopRecording();
+  } else {
+    // 握手还没完成就松开，标记后在握手回调里处理
+    setPtbUI('idle');
+  }
+}
+function ptbStopIfActive(e) {
+  if (_ptbActive) ptbStop(e);
+}
+
+// ─── 录音核心 ─────────────────────────────────────────────────────────────────
+async function startRecording() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[WARN] 已有活跃连接，忽略重复启动', 'err'); return;
+  }
+  _wsCloseExpected = false;
+  pcmBuffer = new Int16Array(0);
+
+  log('[MIC] 请求麦克风权限…', 'info');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, sampleRate: SAMPLE_RATE, echoCancellation: true, noiseSuppression: true }
+    });
+    const track = stream.getAudioTracks()[0];
+    log('[MIC] 权限获取成功 ✓ track="' + (track && track.label) + '"', 'ok');
+  } catch (err) {
+    log('[MIC] 麦克风权限获取失败: ' + err.message, 'err');
+    setPtbUI('idle'); _ptbActive = false; return;
+  }
+
+  let wsUrl;
+  try {
+    wsUrl = await buildAsrUrl(getConfig());
+    log('[WS] 直连腾讯 ASR…', 'info');
+  } catch (err) {
+    log('[签名] ' + err.message, 'err');
+    stream.getTracks().forEach(t => t.stop());
+    setPtbUI('idle'); _ptbActive = false; return;
+  }
+
+  ws = new WebSocket(wsUrl);
+  ws.binaryType = 'arraybuffer';
+  let handshakeDone = false;
+
+  ws.onopen = () => log('[WS] 已连接，等待握手确认…', 'info');
+
+  ws.onmessage = (e) => {
+    const decode = async () => {
+      let text;
+      if (typeof e.data === 'string') { text = e.data; }
+      else {
+        const buf = e.data instanceof Blob ? await e.data.arrayBuffer() : e.data;
+        text = new TextDecoder().decode(buf);
+      }
+      if (!text.startsWith('{')) return;
+      log('[WS] 收到: ' + text.slice(0, 120), 'info');
+      try {
+        const msg = JSON.parse(text);
+        if (!handshakeDone) {
+          if (msg.code === 0) {
+            handshakeDone = true;
+            log('[WS] 握手成功 ✓ 开始推送音频', 'ok');
+            setStatus('识别中', 'connected');
+            // 用户已经松手，握手完成后直接关闭
+            if (!_ptbActive) {
+              log('[PTB] 用户已松手，握手后直接停止', 'info');
+              stream.getTracks().forEach(t => t.stop());
+              _wsCloseExpected = true;
+              if (ws) { ws.close(1000, 'released before handshake'); ws = null; }
+              setPtbUI('idle');
+              setStatus('待机', '');
+              return;
+            }
+            setPtbUI('recording');
+            startMicPipeline(stream);
+          } else {
+            log('[WS] 握手失败 code=' + msg.code + ': ' + msg.message, 'err');
+            _wsCloseExpected = true;
+            stream.getTracks().forEach(t => t.stop());
+            if (ws) ws.close();
+            setPtbUI('idle'); _ptbActive = false;
+          }
+          return;
+        }
+        handleAsrMessage(msg);
+      } catch(err) { log('[WS] 解析错误: ' + err.message, 'err'); }
+    };
+    decode();
+  };
+
+  ws.onerror = () => log('[WS] 连接错误', 'err');
+  ws.onclose = (e) => {
+    log('[WS] 关闭 code=' + e.code + ' reason="' + e.reason + '"', _wsCloseExpected ? 'info' : 'err');
+    if (!_wsCloseExpected) finishRecording();
+  };
+}
+
+function startMicPipeline(stream) {
+  isRecording = true;
+  mediaStream = stream;
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  log('[AudioCtx] sampleRate=' + audioCtx.sampleRate + ' state=' + audioCtx.state, 'info');
+
+  const source = audioCtx.createMediaStreamSource(mediaStream);
+  scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+  let audioFrameCount = 0;
+  scriptProcessor.onaudioprocess = (ev) => {
+    const f32    = ev.inputBuffer.getChannelData(0);
+    const i16    = float32ToInt16(f32);
+    const merged = new Int16Array(pcmBuffer.length + i16.length);
+    merged.set(pcmBuffer); merged.set(i16, pcmBuffer.length);
+    pcmBuffer = merged;
+    audioFrameCount++;
+    if (audioFrameCount === 1) log('[AUDIO] 首帧采集 bufLen=' + pcmBuffer.length, 'ok');
+  };
+  source.connect(scriptProcessor);
+  scriptProcessor.connect(audioCtx.destination);
+  log('[MIC] 音频管道已启动', 'ok');
+
+  let sendCount = 0;
+  sendInterval = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (pcmBuffer.length >= CHUNK_SAMPLES) {
+      const chunk = pcmBuffer.slice(0, CHUNK_SAMPLES);
+      pcmBuffer   = pcmBuffer.slice(CHUNK_SAMPLES);
+      ws.send(chunk.buffer);
+      sendCount++;
+      if (sendCount <= 3 || sendCount % 25 === 0)
+        log('[SEND] 第' + sendCount + '帧 ' + chunk.byteLength + 'B bufRem=' + pcmBuffer.length, 'info');
+    } else {
+      ws.send(new Int16Array(CHUNK_SAMPLES).buffer);
+    }
+  }, PCM_CHUNK_MS);
+}
+
+function stopRecording() {
+  log('[STOP] 停止录音，发送 end 信号…', 'info');
+  clearInterval(sendInterval); sendInterval = null;
+  if (mediaStream)     { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+  if (audioCtx)        { audioCtx.close(); audioCtx = null; }
+  isRecording = false;
+  setPtbUI('idle');
+  setStatus('等待结果', 'waiting');
+  if (ws && ws.readyState === WebSocket.OPEN && pcmBuffer.length > 0) {
+    log('[STOP] 发送剩余缓冲 ' + pcmBuffer.byteLength + ' bytes', 'info');
+    ws.send(pcmBuffer.buffer);
+    pcmBuffer = new Int16Array(0);
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[STOP] 发送 {"type":"end"}，等待 final=1…', 'info');
+    ws.send(JSON.stringify({ type: 'end' }));
+    setTimeout(() => {
+      if (ws) {
+        log('[STOP] 超时未收到 final=1，强制关闭', 'err');
+        _wsCloseExpected = true; ws.close(1000, 'timeout'); ws = null;
+        setStatus('待机', '');
+      }
+    }, 5000);
+  } else {
+    log('[STOP] WS 已非 OPEN，跳过 end 信号', 'err');
+    setStatus('待机', ''); ws = null;
+  }
+}
+
+function finishRecording() {
+  isRecording = false;
+  setPtbUI('idle');
+  setStatus('待机', '');
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    _wsCloseExpected = true; ws.close(1000, 'session ended');
+  }
+  ws = null;
+  log('[STATE] 录音会话结束', 'info');
+}
+
+// ─── ASR 消息处理 ─────────────────────────────────────────────────────────────
+function handleAsrMessage(msg) {
+  if (msg.code !== 0) { log('ASR 错误 ' + msg.code + ': ' + msg.message, 'err'); return; }
+  if (msg.final === 1) {
+    log('识别完成 ✓ 触发AI查询', 'ok');
+    renderTranscript();
+    if (ws) { _wsCloseExpected = true; ws.close(1000, 'final received'); ws = null; }
+    setStatus('待机', '');
+    const q = document.getElementById('transcript-box').innerText.trim();
+    if (q) queryKnowledge(q);
+    return;
+  }
+  const r = msg.result;
+  if (!r) return;
+  const idx = r.index;
+  if (!segments[idx]) segments[idx] = { stable: '', interim: '' };
+  if (r.slice_type === 2) {
+    segments[idx].stable  = r.voice_text_str;
+    segments[idx].interim = '';
+    log('[稳定] #' + idx + ': ' + r.voice_text_str, 'ok');
+  } else {
+    segments[idx].interim = r.voice_text_str;
+  }
+  renderTranscript();
+}
+
+function renderTranscript() {
+  const box = document.getElementById('transcript-box');
+  box.innerHTML = '';
+  const indices = Object.keys(segments).map(Number).sort((a,b) => a-b);
+  for (const idx of indices) {
+    const seg = segments[idx];
+    if (seg.stable) {
+      const span = document.createElement('span');
+      span.className = 'seg-stable'; span.textContent = seg.stable;
+      box.appendChild(span);
+    }
+    if (seg.interim) {
+      const span = document.createElement('span');
+      span.className = 'seg-interim'; span.textContent = seg.interim;
+      box.appendChild(span);
+    }
+  }
+  const text = box.innerText || '';
+  document.getElementById('word-count').textContent =
+    text.trim() ? ([...text.replace(/\s/g,'')].length + ' 字') : '';
+  if (text.trim()) document.getElementById('transcript-strip').classList.add('has-text');
+}
+
+// ─── TTS 分句播放 ─────────────────────────────────────────────────────────────
+let _lastAnswer = '';
+let _ttsQueue   = [];
+let _ttsPlaying = false;
+let _currentAudio = null;  // 当前播放的 Audio 对象
+let _isPaused   = false;
+
+const ICON_PLAY  = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 2h2v12H5zm4 0h2v12H9z"/></svg>';
+
+function setPlayBtnIcon(state) {
+  // state: 'play' | 'pause'
+  const btn = document.getElementById('play-btn');
+  if (!btn) return;
+  btn.innerHTML = state === 'pause' ? ICON_PAUSE : ICON_PLAY;
+}
+
+function togglePlayPause() {
+  if (!_lastAnswer) return;
+  if (_isPaused) {
+    // 恢复：重新从头播
+    _isPaused = false;
+    setPlayBtnIcon('pause');
+    speakText(_lastAnswer);
+    return;
+  }
+  // 暂停：停止当前播放
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio = null;
+  }
+  _ttsQueue   = [];
+  _ttsPlaying = false;
+  _isPaused   = true;
+  setPlayBtnIcon('play');
+}
+
+function _ttsFinished() {
+  _ttsPlaying = false;
+  _currentAudio = null;
+  if (_ttsQueue.length === 0 && !_isPaused) {
+    // 全部播完，回到播放图标（点击重播）
+    setPlayBtnIcon('play');
+  }
+}
+
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY';
+
+function splitSentences(text) {
+  return text.split(/(?<=[。！？!?…]+)/).map(s => s.trim()).filter(s => s.length > 0);
+}
+
+async function fetchTtsAudio(text) {
+  const cfg       = getConfig();
+  const voiceType = parseInt(localStorage.getItem('tts_voice_id') || '101026');
+  const speed     = parseFloat(localStorage.getItem('tts_speed')  || '0');
+  const res = await fetch(cfg.ttsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+    },
+    body: JSON.stringify({ text, voiceType, speed }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  const binary = atob(data.audio);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
+}
+
+async function _playNext() {
+  if (_ttsPlaying || _isPaused || _ttsQueue.length === 0) return;
+  _ttsPlaying = true;
+  const { url } = _ttsQueue.shift();
+  const audio   = new Audio(url);
+  _currentAudio = audio;
+  audio.onended = () => {
+    URL.revokeObjectURL(url);
+    _ttsFinished();
+    _playNext();
+  };
+  audio.onerror = () => {
+    _ttsFinished();
+    _playNext();
+  };
+  audio.play().catch(() => { _ttsFinished(); _playNext(); });
+}
+
+// 主入口：把文本分句，并发预取，顺序播放
+async function speakText(text) {
+  _ttsQueue   = [];
+  _ttsPlaying = false;
+  _isPaused   = false;
+
+  const sentences = splitSentences(text);
+  if (sentences.length === 0) return;
+  log('[TTS] 共 ' + sentences.length + ' 句，开始合成…', 'info');
+
+  // 每句独立 fetch，第一句回来就开始播，后续句子排队
+  const promises = sentences.map((s, i) =>
+    fetchTtsAudio(s)
+      .then(url => {
+        _ttsQueue.push({ idx: i, url });
+        // 按序重排（fetch并发但要顺序播放）
+        _ttsQueue.sort((a, b) => a.idx - b.idx);
+        if (i === 0) _playNext();   // 第一句回来立刻开播
+        log('[TTS] 句' + (i+1) + ' 合成完成', 'ok');
+      })
+      .catch(err => log('[TTS] 句' + (i+1) + ' 合成失败: ' + err.message, 'err'))
+  );
+
+  // 等所有句子 fetch 完成后，触发一次 playNext 以防第一句已播完
+  Promise.all(promises).then(() => _playNext());
+}
+
+// ─── 知识库查询 ───────────────────────────────────────────────────────────────
+async function queryKnowledge(question) {
+  const cfg     = getConfig();
+  const box     = document.getElementById('answer-box');
+  const spinner = document.getElementById('answer-loading');
+  log('[KB] ── 开始查询 ──', 'info');
+  log('[KB] 问题: ' + question, 'info');
+  log('[KB] URL: ' + cfg.fnUrl, 'info');
+  if (!cfg.fnUrl) {
+    box.textContent = '未配置 Edge Function URL'; box.className = 'error'; return;
+  }
+  box.textContent = '查询中…'; box.className = 'loading';
+  spinner.style.display = 'block';
+  try {
+    const res = await fetch(cfg.fnUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+      },
+      body: JSON.stringify({ question }),
+    });
+    log('[KB] 响应状态: ' + res.status + ' ' + res.statusText, res.ok ? 'info' : 'err');
+    const data = await res.json();
+    log('[KB] 响应: ' + JSON.stringify(data).slice(0, 120), 'info');
+    if (data.error) throw new Error(data.error);
+    box.textContent = data.answer; box.className = '';
+    log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
+    _lastAnswer = data.answer;
+    _isPaused = false;
+    document.getElementById('play-btn').classList.add('show');
+    setPlayBtnIcon('pause');
+    // 有回答就触发 TTS
+    if (data.answer && cfg.ttsUrl) {
+      log('[TTS] 触发播报，ttsUrl=' + cfg.ttsUrl, 'info');
+      speakText(data.answer);
+    } else {
+      log('[TTS] 跳过（answer=' + !!data.answer + ' ttsUrl=' + cfg.ttsUrl + '）', 'err');
+    }
+  } catch (err) {
+    box.textContent = '查询失败: ' + err.message; box.className = 'error';
+    log('[KB] ❌ ' + err.message, 'err');
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+// ─── 文字模式手动查询 ─────────────────────────────────────────────────────────
+function manualQuery() {
+  const input = document.getElementById('text-input');
+  const q = input.value.trim() || document.getElementById('transcript-box').innerText.trim();
+  if (!q) return;
+  queryKnowledge(q);
+  input.value = '';
+  setMode('voice'); // 发送后回到语音模式
+}
+document.getElementById('text-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') manualQuery();
+});
+
+// ─── 工具函数 ─────────────────────────────────────────────────────────────────
+function float32ToInt16(f32) {
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return i16;
+}
+function copyTranscript() {
+  const text = document.getElementById('transcript-box').innerText;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => log('已复制到剪贴板', 'ok'));
+}
+function clearAll() {
+  segments = {};
+  document.getElementById('transcript-box').innerHTML = '';
+  document.getElementById('word-count').textContent = '';
+  document.getElementById('answer-box').textContent = '等待提问…';
+  document.getElementById('answer-box').className = 'empty';
+  document.getElementById('text-input').value = '';
+  const strip = document.getElementById('transcript-strip');
+  strip.classList.remove('has-text', 'recording');
+}
+
+// ─── 推荐问题 ─────────────────────────────────────────────────────────────────
+async function loadSuggestQuestions() {
+  try {
+    const res  = await fetch(DEFAULTS.sbUrl + '/rest/v1/suggested_questions?select=question&order=sort_order.asc', {
+      headers: {
+        'apikey':        SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+      }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const wrap = document.getElementById('suggest-wrap');
+    const tags = document.getElementById('suggest-tags');
+    const items = data.map(r =>
+      `<button class="suggest-tag" onclick="askSuggest(this)">${escSuggest(r.question)}</button>`
+    ).join('');
+    // 复制一份实现无缝循环
+    tags.innerHTML = items + items;
+    wrap.classList.remove('hidden');
+  } catch(e) { /* 静默失败，不影响主功能 */ }
+}
+
+function escSuggest(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function askSuggest(btn) {
+  const q = btn.textContent.trim();
+  if (!q) return;
+  // 把问题填入识别框并触发查询
+  const box = document.getElementById('transcript-box');
+  box.innerHTML = '';
+  const span = document.createElement('span');
+  span.className = 'seg-stable';
+  span.textContent = q;
+  box.appendChild(span);
+  document.getElementById('transcript-strip').classList.add('has-text');
+  document.getElementById('word-count').textContent = [...q].length + ' 字';
+  queryKnowledge(q);
+}
+
+// ─── 初始化 ───────────────────────────────────────────────────────────────────
+loadConfig();
+loadSuggestQuestions();
+
+// 点击底部栏以外的区域返回语音模式（仅在文字框为空且未发送时）
+document.addEventListener('click', (e) => {
+  if (currentMode !== 'text') return;
+  const input = document.getElementById('text-input');
+  if (input.value.trim() !== '') return; // 有内容时不切换
+  // 点击在底部栏内（含 input、send-btn、mode-btn）则不切换
+  if (e.target.closest('.bottom-bar')) return;
+  setMode('voice');
+});
+</script>
+
+</body>
+</html>

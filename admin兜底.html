@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识库管理</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { background: #f5f0e8; font-family: 'Noto Sans SC', sans-serif; }
+  .tab-btn { transition: all .15s; }
+  .tab-btn.active { background: #fff; color: #1f2937; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  /* iOS-style toggle */
+  .ios-toggle { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
+  .ios-toggle input { opacity: 0; width: 0; height: 0; }
+  .ios-slider {
+    position: absolute; inset: 0; border-radius: 13px;
+    background: #d1d5db; cursor: pointer; transition: background .2s;
+  }
+  .ios-slider:before {
+    content: ''; position: absolute;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; left: 3px; top: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    transition: transform .2s;
+  }
+  .ios-toggle input:checked + .ios-slider { background: #3b82f6; }
+  .ios-toggle input:checked + .ios-slider:before { transform: translateX(18px); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-3xl mx-auto px-4 pt-6 pb-10 space-y-4">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-2">
+    <h1 class="text-xl font-semibold text-gray-800">知识库管理</h1>
+    <span id="conn-status" class="text-xs text-gray-400 font-mono">未连接</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-gray-100 rounded-xl p-1 flex gap-1">
+    <button class="tab-btn active flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('add')">添加条目</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('suggest')">AI 生成</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('list')">条目列表</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('config')">首页配置</button>
+  </div>
+
+  <!-- Tab: 添加条目 -->
+  <div id="tab-add" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+    <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">添加条目</h2>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">标题</label>
+      <input id="inp-title" type="text" placeholder="条目标题"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">内容</label>
+      <textarea id="inp-content" rows="5" placeholder="条目详细内容…"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 resize-none"></textarea>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="addEntry()"
+        class="text-sm font-mono bg-blue-600 text-white rounded-lg px-5 py-2 hover:bg-blue-500 transition-colors">
+        添加
+      </button>
+      <span id="add-status" class="text-xs text-gray-400"></span>
+    </div>
+  </div>
+
+  <!-- Tab: AI 生成 -->
+  <div id="tab-suggest" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3 hidden">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">推荐问题</h2>
+      <button onclick="genSuggestQuestions()"
+        class="text-xs font-mono bg-gray-800 text-white rounded-lg px-4 py-1.5 hover:bg-gray-700 transition-colors flex items-center gap-1.5" id="gen-btn">
+        ✦ AI 生成
+      </button>
+    </div>
+    <p class="text-xs text-gray-400">根据知识库内容自动生成10个常见问题，展示在前台供用户点击查询。</p>
+    <div id="suggest-list" class="space-y-1.5 text-sm text-gray-400 italic">加载中…</div>
+    <div id="gen-status" class="text-xs text-gray-400 hidden"></div>
+  </div>
+
+  <!-- Tab: 条目列表 -->
+  <div id="tab-list" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3 hidden">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">条目列表</h2>
+      <button onclick="loadEntries()" class="text-xs text-blue-500 hover:text-blue-400 font-mono">刷新</button>
+    </div>
+    <div id="entries-list" class="space-y-2 text-sm text-gray-400 italic">
+      请先连接 Supabase
+    </div>
+  </div>
+
+  <!-- Tab: 首页配置 -->
+  <div id="tab-config" class="bg-white border border-gray-200 rounded-xl p-5 space-y-4 hidden">
+    <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">首页配置</h2>
+
+    <!-- 日志开关 -->
+    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+      <div>
+        <div class="text-sm font-medium text-gray-700">显示调试日志</div>
+        <div class="text-xs text-gray-400 mt-0.5">开启后首页底部显示系统日志面板</div>
+      </div>
+      <label class="ios-toggle">
+        <input type="checkbox" id="cfg-show-log" onchange="saveHomeConfig()" />
+        <span class="ios-slider"></span>
+      </label>
+    </div>
+
+    <!-- TTS 音色 -->
+    <div class="py-3 border-b border-gray-100 space-y-2">
+      <div class="text-sm font-medium text-gray-700">TTS 音色</div>
+      <div class="text-xs text-gray-400">选择 AI 回答的播报声音</div>
+      <div class="flex gap-2 flex-wrap" id="voice-type-tabs">
+        <button onclick="filterVoice('精品')" data-vtype="精品" class="vtype-btn active text-xs px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-600">精品</button>
+        <button onclick="filterVoice('大模型')" data-vtype="大模型" class="vtype-btn text-xs px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-600">大模型</button>
+        <button onclick="filterVoice('超自然')" data-vtype="超自然" class="vtype-btn text-xs px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-600">超自然</button>
+      </div>
+      <div id="voice-list" class="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pt-1"></div>
+    </div>
+
+    <!-- 语速 -->
+    <div class="py-3 border-b border-gray-100 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-medium text-gray-700">语速</div>
+        <span id="speed-val" class="text-xs text-blue-500 font-mono">0（正常）</span>
+      </div>
+      <input type="range" id="cfg-speed" min="-2" max="2" step="0.5" value="0"
+        oninput="updateSpeed(this.value)" onchange="saveHomeConfig()"
+        class="w-full accent-blue-500" />
+      <div class="flex justify-between text-xs text-gray-300">
+        <span>很慢</span><span>慢</span><span>正常</span><span>快</span><span>很快</span>
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-400 pt-1">配置保存后，刷新前台首页即可生效。</p>
+  </div>
+
+</div>
+
+<script>
+const SB_URL = 'https://cgtrlucacjrbtazidixn.supabase.co'
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY'
+let sb = null
+
+window.addEventListener('load', () => {
+  sb = supabase.createClient(SB_URL, SB_KEY)
+  document.getElementById('conn-status').textContent = '已连接 ✓'
+  document.getElementById('conn-status').className = 'text-xs text-green-500 font-mono'
+  loadEntries()
+  loadSuggestList()
+  loadHomeConfig()
+})
+
+// ── Tab 切换 ──────────────────────────────────────────────────────────────────
+const TABS = ['add', 'suggest', 'list', 'config']
+function switchTab(name) {
+  TABS.forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name)
+  })
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', TABS[i] === name)
+  })
+}
+
+// ── 首页配置 ──────────────────────────────────────────────────────────────────
+const TTS_URL = 'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/tts'
+let _allVoices = []
+let _selectedVoice = 101026
+let _currentVtype = '精品'
+
+async function loadHomeConfig() {
+  const showLog = localStorage.getItem('home_show_log') === 'true'
+  document.getElementById('cfg-show-log').checked = showLog
+
+  const savedVoice = parseInt(localStorage.getItem('tts_voice_id') || '101026')
+  const savedSpeed = parseFloat(localStorage.getItem('tts_speed') || '0')
+  _selectedVoice = savedVoice
+  document.getElementById('cfg-speed').value = savedSpeed
+  updateSpeed(savedSpeed)
+
+  // 拉音色列表
+  try {
+    const res = await fetch(TTS_URL + '/voices', {
+      headers: { 'Authorization': 'Bearer ' + SB_KEY }
+    })
+    const data = await res.json()
+    _allVoices = data.voices || []
+    filterVoice(_currentVtype)
+  } catch(e) {
+    document.getElementById('voice-list').innerHTML =
+      '<div class="text-xs text-red-400 col-span-2">音色加载失败</div>'
+  }
+}
+
+function filterVoice(type) {
+  _currentVtype = type
+  document.querySelectorAll('.vtype-btn').forEach(b => {
+    const active = b.dataset.vtype === type
+    b.classList.toggle('bg-gray-800', active)
+    b.classList.toggle('text-white', active)
+    b.classList.toggle('border-gray-800', active)
+    b.classList.toggle('active', active)
+  })
+  const list = document.getElementById('voice-list')
+  const filtered = _allVoices.filter(v => v.type === type)
+  list.innerHTML = filtered.map(v => `
+    <button onclick="selectVoice(${v.id})" data-vid="${v.id}"
+      class="voice-card text-left px-3 py-2 rounded-lg border text-xs transition-all
+        ${_selectedVoice === v.id ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}">
+      <div class="font-medium">${v.name}</div>
+      <div class="text-gray-400 mt-0.5">${v.scene}</div>
+    </button>
+  `).join('')
+}
+
+function selectVoice(id) {
+  _selectedVoice = id
+  filterVoice(_currentVtype)
+  saveHomeConfig()
+}
+
+function updateSpeed(val) {
+  const labels = { '-2': '很慢', '-1': '慢', '0': '正常', '1': '快', '2': '很快' }
+  const v = parseFloat(val)
+  document.getElementById('speed-val').textContent = v + '（' + (labels[String(v)] || val) + '）'
+}
+
+function saveHomeConfig() {
+  const showLog = document.getElementById('cfg-show-log').checked
+  const speed   = document.getElementById('cfg-speed').value
+  localStorage.setItem('home_show_log', showLog ? 'true' : 'false')
+  localStorage.setItem('tts_voice_id',  String(_selectedVoice))
+  localStorage.setItem('tts_speed',     speed)
+}
+
+// ── 添加条目 ──────────────────────────────────────────────────────────────────
+async function addEntry() {
+  if (!sb) { alert('请先连接 Supabase'); return }
+  const title   = document.getElementById('inp-title').value.trim()
+  const content = document.getElementById('inp-content').value.trim()
+  if (!title || !content) { alert('标题和内容不能为空'); return }
+
+  const status = document.getElementById('add-status')
+  status.textContent = '提交中…'
+
+  const { error } = await sb.from('knowledge_base').insert({ title, content })
+  if (error) {
+    status.textContent = '失败: ' + error.message
+    status.className = 'text-xs text-red-500'
+  } else {
+    status.textContent = '✓ 已添加'
+    status.className = 'text-xs text-green-500'
+    document.getElementById('inp-title').value   = ''
+    document.getElementById('inp-content').value = ''
+    setTimeout(() => status.textContent = '', 2000)
+    loadEntries()
+  }
+}
+
+// ── 加载列表 ──────────────────────────────────────────────────────────────────
+async function loadEntries() {
+  if (!sb) return
+  const box = document.getElementById('entries-list')
+  box.innerHTML = '<div class="text-gray-400 italic text-sm">加载中…</div>'
+
+  const { data, error } = await sb
+    .from('knowledge_base')
+    .select('id, title, content, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (error) {
+    box.innerHTML = `<div class="text-red-500 text-sm">${error.message}</div>`
+    return
+  }
+  if (!data.length) {
+    box.innerHTML = '<div class="text-gray-400 italic text-sm">暂无条目</div>'
+    return
+  }
+
+  box.innerHTML = data.map(r => `
+    <div class="border border-gray-100 rounded-lg p-3 space-y-1">
+      <div class="flex items-start justify-between gap-2">
+        <span class="font-medium text-gray-800 text-sm">${escHtml(r.title)}</span>
+        <button onclick="deleteEntry('${r.id}')"
+          class="text-xs text-red-400 hover:text-red-600 shrink-0 font-mono">删除</button>
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed line-clamp-3">${escHtml(r.content)}</p>
+      <span class="text-xs text-gray-300 font-mono">${new Date(r.created_at).toLocaleString('zh-CN')}</span>
+    </div>
+  `).join('')
+}
+
+// ── 删除条目 ──────────────────────────────────────────────────────────────────
+async function deleteEntry(id) {
+  if (!confirm('确认删除？')) return
+  const { error } = await sb.from('knowledge_base').delete().eq('id', id)
+  if (error) alert('删除失败: ' + error.message)
+  else loadEntries()
+}
+
+// ── 推荐问题管理 ──────────────────────────────────────────────────────────────
+const FN_BASE = 'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1'
+
+async function loadSuggestList() {
+  const box = document.getElementById('suggest-list')
+  const { data, error } = await sb
+    .from('suggested_questions')
+    .select('id, question, sort_order')
+    .order('sort_order', { ascending: true })
+  if (error) { box.innerHTML = `<div class="text-red-500">${error.message}</div>`; return }
+  if (!data.length) { box.innerHTML = '<div class="italic">暂无推荐问题</div>'; return }
+  box.innerHTML = data.map((r, i) => `
+    <div class="flex items-center gap-2 py-1 border-b border-gray-50 last:border-0">
+      <span class="text-xs text-gray-300 w-4 shrink-0">${i+1}</span>
+      <span class="flex-1 text-sm text-gray-700">${escHtml(r.question)}</span>
+      <button onclick="deleteSuggest('${r.id}')" class="text-xs text-red-400 hover:text-red-600 shrink-0">删除</button>
+    </div>
+  `).join('')
+}
+
+async function deleteSuggest(id) {
+  if (!confirm('删除该问题？')) return
+  await sb.from('suggested_questions').delete().eq('id', id)
+  loadSuggestList()
+}
+
+async function genSuggestQuestions() {
+  const btn    = document.getElementById('gen-btn')
+  const status = document.getElementById('gen-status')
+  btn.disabled = true
+  btn.textContent = '生成中…'
+  status.classList.remove('hidden')
+  status.className = 'text-xs text-gray-500'
+  status.textContent = '正在读取知识库并生成问题，约需10秒…'
+
+  try {
+    const { data: kb } = await sb
+      .from('knowledge_base')
+      .select('title, content')
+      .order('created_at', { ascending: true })
+      .limit(20)
+    if (!kb || !kb.length) throw new Error('知识库为空，请先添加内容')
+
+    const kbSummary = kb.map(r => `【${r.title}】${r.content.slice(0, 80)}`).join('\n')
+
+    const fnRes = await fetch(`${FN_BASE}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SB_KEY,
+        'Authorization': `Bearer ${SB_KEY}`
+      },
+      body: JSON.stringify({ kb_summary: kbSummary })
+    })
+    const fnData = await fnRes.json()
+    if (!fnRes.ok) throw new Error(fnData.error || `Edge Function 错误 ${fnRes.status}`)
+
+    const questions = fnData.questions
+    if (!questions || questions.length < 3) throw new Error('生成失败，请重试')
+
+    await sb.from('suggested_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    const rows = questions.map((q, i) => ({ question: q, sort_order: i + 1 }))
+    const { error } = await sb.from('suggested_questions').insert(rows)
+    if (error) throw new Error(error.message)
+
+    status.className = 'text-xs text-green-500'
+    status.textContent = `✓ 已生成 ${questions.length} 个问题`
+    loadSuggestList()
+  } catch (err) {
+    status.className = 'text-xs text-red-500'
+    status.textContent = '失败: ' + err.message
+  } finally {
+    btn.disabled = false
+    btn.textContent = '✦ AI 生成'
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+</script>
+</body>
+</html>
