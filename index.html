@@ -662,7 +662,10 @@ async function queryKnowledge(question) {
     log('[KB] 发送 fetch 请求…', 'info');
     const res = await fetch(cfg.fnUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY',
+      },
       body: JSON.stringify({ question }),
     });
     log('[KB] 响应状态: ' + res.status + ' ' + res.statusText, res.ok ? 'info' : 'err');
