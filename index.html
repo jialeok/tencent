@@ -769,6 +769,7 @@ function getConfig() {
     punc:      document.getElementById('cfg-punc').checked,
     sbUrl:     DEFAULTS.sbUrl,
     fnUrl:     DEFAULTS.fnUrl,
+    ttsUrl:    DEFAULTS.ttsUrl,
   };
 }
 
@@ -1138,7 +1139,12 @@ async function queryKnowledge(question) {
     box.textContent = data.answer; box.className = '';
     log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
     // 有回答就触发 TTS
-    if (data.answer && cfg.ttsUrl) speakText(data.answer);
+    if (data.answer && cfg.ttsUrl) {
+      log('[TTS] 触发播报，ttsUrl=' + cfg.ttsUrl, 'info');
+      speakText(data.answer);
+    } else {
+      log('[TTS] 跳过（answer=' + !!data.answer + ' ttsUrl=' + cfg.ttsUrl + '）', 'err');
+    }
   } catch (err) {
     box.textContent = '查询失败: ' + err.message; box.className = 'error';
     log('[KB] ❌ ' + err.message, 'err');
