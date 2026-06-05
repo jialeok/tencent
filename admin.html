@@ -44,6 +44,20 @@
     </div>
   </div>
 
+  <!-- 推荐问题管理 -->
+  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">推荐问题</h2>
+      <button onclick="genSuggestQuestions()"
+        class="text-xs font-mono bg-gray-800 text-white rounded-lg px-4 py-1.5 hover:bg-gray-700 transition-colors flex items-center gap-1.5" id="gen-btn">
+        ✦ AI 生成
+      </button>
+    </div>
+    <p class="text-xs text-gray-400">根据知识库内容自动生成10个常见问题，展示在前台供用户点击查询。</p>
+    <div id="suggest-list" class="space-y-1.5 text-sm text-gray-400 italic">加载中…</div>
+    <div id="gen-status" class="text-xs text-gray-400 hidden"></div>
+  </div>
+
   <!-- 条目列表 -->
   <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
     <div class="flex items-center justify-between">
@@ -67,6 +81,7 @@ window.addEventListener('load', () => {
   document.getElementById('conn-status').textContent = '已连接 ✓'
   document.getElementById('conn-status').className = 'text-xs text-green-500 font-mono'
   loadEntries()
+  loadSuggestList()
 })
 
 // ── 添加条目 ──────────────────────────────────────────────────────────────────
@@ -135,7 +150,88 @@ async function deleteEntry(id) {
   else loadEntries()
 }
 
-function escHtml(s) {
+
+// ── 推荐问题管理 ──────────────────────────────────────────────────────────────
+const FN_BASE = 'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1'
+
+async function loadSuggestList() {
+  const box = document.getElementById('suggest-list')
+  const { data, error } = await sb
+    .from('suggested_questions')
+    .select('id, question, sort_order')
+    .order('sort_order', { ascending: true })
+  if (error) { box.innerHTML = `<div class="text-red-500">${error.message}</div>`; return }
+  if (!data.length) { box.innerHTML = '<div class="italic">暂无推荐问题</div>'; return }
+  box.innerHTML = data.map((r, i) => `
+    <div class="flex items-center gap-2 py-1 border-b border-gray-50 last:border-0">
+      <span class="text-xs text-gray-300 w-4 shrink-0">${i+1}</span>
+      <span class="flex-1 text-sm text-gray-700">${escHtml(r.question)}</span>
+      <button onclick="deleteSuggest('${r.id}')" class="text-xs text-red-400 hover:text-red-600 shrink-0">删除</button>
+    </div>
+  `).join('')
+}
+
+async function deleteSuggest(id) {
+  if (!confirm('删除该问题？')) return
+  await sb.from('suggested_questions').delete().eq('id', id)
+  loadSuggestList()
+}
+
+async function genSuggestQuestions() {
+  const btn    = document.getElementById('gen-btn')
+  const status = document.getElementById('gen-status')
+  btn.disabled = true
+  btn.textContent = '生成中…'
+  status.className = 'text-xs text-gray-500'
+  status.textContent = '正在读取知识库并生成问题，约需10秒…'
+
+  try {
+    // 1. 取知识库摘要（前20条标题+内容片段）
+    const { data: kb } = await sb
+      .from('knowledge_base')
+      .select('title, content')
+      .order('created_at', { ascending: true })
+      .limit(20)
+    if (!kb || !kb.length) throw new Error('知识库为空，请先添加内容')
+
+    const kbSummary = kb.map(r => `【${r.title}】${r.content.slice(0, 80)}`).join('\n')
+
+    // 2. 调 Claude API 生成10个问题
+    const prompt = `以下是一个家族知识库的内容摘要：\n\n${kbSummary}\n\n请根据以上内容，生成10个用户最可能提问的问题。要求：\n- 问题必须基于知识库实际内容，不要编造\n- 问题简短自然，像口语提问\n- 每行一个问题，不加编号、不加标点以外的格式\n- 只输出10个问题，不要任何说明`
+
+    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    })
+    const apiData = await apiRes.json()
+    const text = apiData.content?.[0]?.text || ''
+    const questions = text.split('\n').map(s => s.trim()).filter(s => s.length > 2 && s.length < 60).slice(0, 10)
+    if (questions.length < 3) throw new Error('生成失败，请重试')
+
+    // 3. 清空旧数据，写入新问题
+    await sb.from('suggested_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    const rows = questions.map((q, i) => ({ question: q, sort_order: i + 1 }))
+    const { error } = await sb.from('suggested_questions').insert(rows)
+    if (error) throw new Error(error.message)
+
+    status.className = 'text-xs text-green-500'
+    status.textContent = `✓ 已生成 ${questions.length} 个问题`
+    loadSuggestList()
+  } catch (err) {
+    status.className = 'text-xs text-red-500'
+    status.textContent = '失败: ' + err.message
+  } finally {
+    btn.disabled = false
+    btn.textContent = '✦ AI 生成'
+  }
+}
+
+
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 }
 </script>
