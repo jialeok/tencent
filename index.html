@@ -1346,6 +1346,14 @@ function askSuggest(btn) {
 loadConfig();
 loadSuggestQuestions();
 
+// 根据后台配置决定日志区域显隐
+(function() {
+  const showLog = localStorage.getItem('home_show_log') === 'true';
+  const logCard = document.querySelector('.card[style*="margin-bottom:0"]') ||
+    document.getElementById('log-toggle')?.closest('.card');
+  if (logCard) logCard.style.display = showLog ? '' : 'none';
+})();
+
 // 点击底部栏以外的区域返回语音模式（仅在文字框为空且未发送时）
 document.addEventListener('click', (e) => {
   if (currentMode !== 'text') return;

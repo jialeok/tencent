@@ -8,22 +8,46 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { background: #f5f0e8; font-family: 'Noto Sans SC', sans-serif; }
+  .tab-btn { transition: all .15s; }
+  .tab-btn.active { background: #fff; color: #1f2937; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  /* iOS-style toggle */
+  .ios-toggle { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
+  .ios-toggle input { opacity: 0; width: 0; height: 0; }
+  .ios-slider {
+    position: absolute; inset: 0; border-radius: 13px;
+    background: #d1d5db; cursor: pointer; transition: background .2s;
+  }
+  .ios-slider:before {
+    content: ''; position: absolute;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; left: 3px; top: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    transition: transform .2s;
+  }
+  .ios-toggle input:checked + .ios-slider { background: #3b82f6; }
+  .ios-toggle input:checked + .ios-slider:before { transform: translateX(18px); }
 </style>
 </head>
-<body class="min-h-screen p-6">
+<body class="min-h-screen">
 
-<div class="max-w-3xl mx-auto space-y-6">
+<div class="max-w-3xl mx-auto px-4 pt-6 pb-10 space-y-4">
 
   <!-- Header -->
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between mb-2">
     <h1 class="text-xl font-semibold text-gray-800">知识库管理</h1>
     <span id="conn-status" class="text-xs text-gray-400 font-mono">未连接</span>
   </div>
 
+  <!-- Tabs -->
+  <div class="bg-gray-100 rounded-xl p-1 flex gap-1">
+    <button class="tab-btn active flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('add')">添加条目</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('suggest')">AI 生成</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('list')">条目列表</button>
+    <button class="tab-btn flex-1 text-xs font-medium text-gray-500 rounded-lg px-3 py-2" onclick="switchTab('config')">首页配置</button>
+  </div>
 
-
-  <!-- 添加条目 -->
-  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+  <!-- Tab: 添加条目 -->
+  <div id="tab-add" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
     <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">添加条目</h2>
     <div>
       <label class="block text-xs text-gray-500 mb-1">标题</label>
@@ -44,8 +68,8 @@
     </div>
   </div>
 
-  <!-- 推荐问题管理 -->
-  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+  <!-- Tab: AI 生成 -->
+  <div id="tab-suggest" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3 hidden">
     <div class="flex items-center justify-between">
       <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">推荐问题</h2>
       <button onclick="genSuggestQuestions()"
@@ -58,8 +82,8 @@
     <div id="gen-status" class="text-xs text-gray-400 hidden"></div>
   </div>
 
-  <!-- 条目列表 -->
-  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+  <!-- Tab: 条目列表 -->
+  <div id="tab-list" class="bg-white border border-gray-200 rounded-xl p-5 space-y-3 hidden">
     <div class="flex items-center justify-between">
       <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">条目列表</h2>
       <button onclick="loadEntries()" class="text-xs text-blue-500 hover:text-blue-400 font-mono">刷新</button>
@@ -67,6 +91,24 @@
     <div id="entries-list" class="space-y-2 text-sm text-gray-400 italic">
       请先连接 Supabase
     </div>
+  </div>
+
+  <!-- Tab: 首页配置 -->
+  <div id="tab-config" class="bg-white border border-gray-200 rounded-xl p-5 space-y-4 hidden">
+    <h2 class="text-xs font-mono text-gray-400 uppercase tracking-widest">首页配置</h2>
+
+    <div class="flex items-center justify-between py-2 border-b border-gray-50">
+      <div>
+        <div class="text-sm font-medium text-gray-700">显示调试日志</div>
+        <div class="text-xs text-gray-400 mt-0.5">开启后首页底部显示系统日志面板</div>
+      </div>
+      <label class="ios-toggle">
+        <input type="checkbox" id="cfg-show-log" onchange="saveHomeConfig()" />
+        <span class="ios-slider"></span>
+      </label>
+    </div>
+
+    <p class="text-xs text-gray-400">配置保存后，刷新前台首页即可生效。</p>
   </div>
 
 </div>
@@ -82,7 +124,29 @@ window.addEventListener('load', () => {
   document.getElementById('conn-status').className = 'text-xs text-green-500 font-mono'
   loadEntries()
   loadSuggestList()
+  loadHomeConfig()
 })
+
+// ── Tab 切换 ──────────────────────────────────────────────────────────────────
+const TABS = ['add', 'suggest', 'list', 'config']
+function switchTab(name) {
+  TABS.forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name)
+  })
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', TABS[i] === name)
+  })
+}
+
+// ── 首页配置 ──────────────────────────────────────────────────────────────────
+function loadHomeConfig() {
+  const showLog = localStorage.getItem('home_show_log') === 'true'
+  document.getElementById('cfg-show-log').checked = showLog
+}
+function saveHomeConfig() {
+  const showLog = document.getElementById('cfg-show-log').checked
+  localStorage.setItem('home_show_log', showLog ? 'true' : 'false')
+}
 
 // ── 添加条目 ──────────────────────────────────────────────────────────────────
 async function addEntry() {
@@ -150,7 +214,6 @@ async function deleteEntry(id) {
   else loadEntries()
 }
 
-
 // ── 推荐问题管理 ──────────────────────────────────────────────────────────────
 const FN_BASE = 'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1'
 
@@ -187,7 +250,6 @@ async function genSuggestQuestions() {
   status.textContent = '正在读取知识库并生成问题，约需10秒…'
 
   try {
-    // 1. 取知识库摘要（前20条标题+内容片段）
     const { data: kb } = await sb
       .from('knowledge_base')
       .select('title, content')
@@ -197,8 +259,7 @@ async function genSuggestQuestions() {
 
     const kbSummary = kb.map(r => `【${r.title}】${r.content.slice(0, 80)}`).join('\n')
 
-    // 2. 调 Edge Function 生成问题
-    const fnRes = await fetch(`${FN_BASE}/gen-suggest-questions`, {
+    const fnRes = await fetch(`${FN_BASE}/query`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -213,7 +274,6 @@ async function genSuggestQuestions() {
     const questions = fnData.questions
     if (!questions || questions.length < 3) throw new Error('生成失败，请重试')
 
-    // 3. 清空旧数据，写入新问题
     await sb.from('suggested_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     const rows = questions.map((q, i) => ({ question: q, sort_order: i + 1 }))
     const { error } = await sb.from('suggested_questions').insert(rows)
