@@ -598,7 +598,7 @@
   </div>
 
   <!-- Log (collapsed by default) -->
-  <div class="card" style="margin-bottom:0;">
+  <div class="card" id="log-card" style="margin-bottom:0;">
     <div class="log-toggle" id="log-toggle" onclick="toggleLog()">
       <svg class="log-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
         <path d="M4 2l4 4-4 4"/>
@@ -1347,6 +1347,13 @@ function askSuggest(btn) {
 // ─── 初始化 ───────────────────────────────────────────────────────────────────
 loadConfig();
 loadSuggestQuestions();
+
+// 根据后台配置决定日志区域显隐，默认隐藏
+(function() {
+  const showLog = localStorage.getItem('home_show_log') === 'true';
+  const logCard = document.getElementById('log-card');
+  if (logCard) logCard.style.display = showLog ? '' : 'none';
+})();
 
 // 点击底部栏以外的区域返回语音模式（仅在文字框为空且未发送时）
 document.addEventListener('click', (e) => {

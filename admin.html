@@ -199,10 +199,11 @@ function filterVoice(type) {
   _currentVtype = type
   document.querySelectorAll('.vtype-btn').forEach(b => {
     const active = b.dataset.vtype === type
-    b.classList.toggle('bg-gray-800', active)
-    b.classList.toggle('text-white', active)
-    b.classList.toggle('border-gray-800', active)
-    b.classList.toggle('active', active)
+    b.className = 'vtype-btn text-xs px-3 py-1 rounded-full border transition-all ' +
+      (active
+        ? 'bg-gray-800 text-white border-gray-800'
+        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400')
+    b.dataset.vtype = b.dataset.vtype
   })
   const list = document.getElementById('voice-list')
   const filtered = _allVoices.filter(v => v.type === type)
