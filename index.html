@@ -1152,14 +1152,16 @@ function splitSentences(text) {
 }
 
 async function fetchTtsAudio(text) {
-  const cfg = getConfig();
+  const cfg       = getConfig();
+  const voiceType = parseInt(localStorage.getItem('tts_voice_id') || '101026');
+  const speed     = parseFloat(localStorage.getItem('tts_speed')  || '0');
   const res = await fetch(cfg.ttsUrl, {
     method: 'POST',
     headers: {
       'Content-Type':  'application/json',
       'Authorization': 'Bearer ' + SUPABASE_ANON,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, voiceType, speed }),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
@@ -1345,14 +1347,6 @@ function askSuggest(btn) {
 // ─── 初始化 ───────────────────────────────────────────────────────────────────
 loadConfig();
 loadSuggestQuestions();
-
-// 根据后台配置决定日志区域显隐
-(function() {
-  const showLog = localStorage.getItem('home_show_log') === 'true';
-  const logCard = document.querySelector('.card[style*="margin-bottom:0"]') ||
-    document.getElementById('log-toggle')?.closest('.card');
-  if (logCard) logCard.style.display = showLog ? '' : 'none';
-})();
 
 // 点击底部栏以外的区域返回语音模式（仅在文字框为空且未发送时）
 document.addEventListener('click', (e) => {
