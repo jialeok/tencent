@@ -623,7 +623,7 @@ async function queryKnowledge(question) {
     return;
   }
 
-  log(, 'info');
+  log('[KB] 查询中: ' + question.slice(0, 40) + '…', 'info');
   const section = document.getElementById('answer-section');
   const box     = document.getElementById('answer-box');
   const loading = document.getElementById('answer-loading');
@@ -641,10 +641,10 @@ async function queryKnowledge(question) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     box.textContent = data.answer;
-    log(, 'ok');
+    log('[KB] 回答完成（引用 ' + data.sources + ' 条知识）', 'ok');
   } catch (err) {
     box.textContent = '查询失败: ' + err.message;
-    log(, 'err');
+    log('[KB] 查询失败: ' + err.message, 'err');
   } finally {
     loading.classList.add('hidden');
   }
