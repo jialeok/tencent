@@ -624,6 +624,7 @@ const DEFAULTS = {
   secretkey: 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25',
   sbUrl:     'https://cgtrlucacjrbtazidixn.supabase.co',
   fnUrl:     'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query',
+  ttsUrl:    'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/tts',
   engine:    '16k_zh',
   vad:       true,
   punc:      false,
@@ -1035,6 +1036,79 @@ function renderTranscript() {
   if (text.trim()) document.getElementById('transcript-strip').classList.add('has-text');
 }
 
+// ─── TTS 分句播放 ─────────────────────────────────────────────────────────────
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY';
+
+let _ttsQueue   = [];   // 待播句子
+let _ttsPlaying = false;
+
+function splitSentences(text) {
+  // 按句末标点切分，保留标点，过滤空串
+  return text.split(/(?<=[。！？!?…]+)/).map(s => s.trim()).filter(s => s.length > 0);
+}
+
+async function fetchTtsAudio(text) {
+  const cfg = getConfig();
+  const res = await fetch(cfg.ttsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+    },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  // base64 mp3 → blob URL
+  const binary = atob(data.audio);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
+}
+
+async function _playNext() {
+  if (_ttsPlaying || _ttsQueue.length === 0) return;
+  _ttsPlaying = true;
+  const { url } = _ttsQueue.shift();
+  const audio   = new Audio(url);
+  audio.onended = () => {
+    URL.revokeObjectURL(url);
+    _ttsPlaying = false;
+    _playNext();
+  };
+  audio.onerror = () => {
+    _ttsPlaying = false;
+    _playNext();
+  };
+  audio.play().catch(() => { _ttsPlaying = false; _playNext(); });
+}
+
+// 主入口：把文本分句，并发预取，顺序播放
+async function speakText(text) {
+  _ttsQueue   = [];
+  _ttsPlaying = false;
+
+  const sentences = splitSentences(text);
+  if (sentences.length === 0) return;
+  log('[TTS] 共 ' + sentences.length + ' 句，开始合成…', 'info');
+
+  // 每句独立 fetch，第一句回来就开始播，后续句子排队
+  const promises = sentences.map((s, i) =>
+    fetchTtsAudio(s)
+      .then(url => {
+        _ttsQueue.push({ idx: i, url });
+        // 按序重排（fetch并发但要顺序播放）
+        _ttsQueue.sort((a, b) => a.idx - b.idx);
+        if (i === 0) _playNext();   // 第一句回来立刻开播
+        log('[TTS] 句' + (i+1) + ' 合成完成', 'ok');
+      })
+      .catch(err => log('[TTS] 句' + (i+1) + ' 合成失败: ' + err.message, 'err'))
+  );
+
+  // 等所有句子 fetch 完成后，触发一次 playNext 以防第一句已播完
+  Promise.all(promises).then(() => _playNext());
+}
+
 // ─── 知识库查询 ───────────────────────────────────────────────────────────────
 async function queryKnowledge(question) {
   const cfg     = getConfig();
@@ -1052,8 +1126,8 @@ async function queryKnowledge(question) {
     const res = await fetch(cfg.fnUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNndHJsdWNhY2pyYnRhemlkaXhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDI1NDcsImV4cCI6MjA5NDExODU0N30.PX_IncuHZfsLl23OHt00XXyswycFtkmcUI3Su7BWkWY',
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
       },
       body: JSON.stringify({ question }),
     });
@@ -1063,6 +1137,8 @@ async function queryKnowledge(question) {
     if (data.error) throw new Error(data.error);
     box.textContent = data.answer; box.className = '';
     log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
+    // 有回答就触发 TTS
+    if (data.answer && cfg.ttsUrl) speakText(data.answer);
   } catch (err) {
     box.textContent = '查询失败: ' + err.message; box.className = 'error';
     log('[KB] ❌ ' + err.message, 'err');
