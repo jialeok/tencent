@@ -176,7 +176,7 @@
     </div>
 
     <!-- AI 答案 -->
-    <div id="answer-section" class="hidden mt-4 border border-line rounded-md bg-white">
+    <div id="answer-section" class="mt-4 border border-line rounded-md bg-white">
       <div class="flex items-center justify-between px-4 py-2 border-b border-line">
         <span class="text-xs font-mono text-muted uppercase tracking-widest">AI 回答</span>
         <div id="answer-loading" class="hidden">
@@ -186,7 +186,7 @@
           </svg>
         </div>
       </div>
-      <div id="answer-box" class="p-4 text-sm leading-relaxed text-ink whitespace-pre-wrap"></div>
+      <div id="answer-box" class="p-4 text-sm leading-relaxed text-ink whitespace-pre-wrap text-gray-400 italic">等待识别结果…</div>
     </div>
 
     <!-- Actions -->
@@ -516,10 +516,19 @@ function startMicPipeline(stream) {
 
 function stopRecording() {
   log('[STOP] 停止录音，发送 end 信号…');
-  _wsCloseExpected = true;  // 标记预期关闭，防止 onclose 触发重复 finishRecording
 
   clearInterval(sendInterval);
   sendInterval = null;
+
+  // 释放音频资源（麦克风关掉，但 WS 保持打开等待 final=1）
+  if (mediaStream)     { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+  if (audioCtx)        { audioCtx.close(); audioCtx = null; }
+
+  // 先更新UI为停止状态
+  isRecording = false;
+  updateUI(false);
+  setStatus('等待结果…', 'bg-yellow-400');
 
   // 发送剩余缓冲
   if (ws && ws.readyState === WebSocket.OPEN && pcmBuffer.length > 0) {
@@ -528,20 +537,25 @@ function stopRecording() {
     pcmBuffer = new Int16Array(0);
   }
 
-  // 发送结束标记
+  // 发送结束标记，WS 保持打开等待 final=1 回调
   if (ws && ws.readyState === WebSocket.OPEN) {
-    log('[STOP] 发送 {"type":"end"}', 'info');
+    log('[STOP] 发送 {"type":"end"}，等待 final=1…', 'info');
     ws.send(JSON.stringify({ type: 'end' }));
+    // 超时保护：5秒内没收到 final=1 就强制关闭
+    setTimeout(() => {
+      if (ws) {
+        log('[STOP] 超时未收到 final=1，强制关闭', 'err');
+        _wsCloseExpected = true;
+        ws.close(1000, 'timeout');
+        ws = null;
+        setStatus('未连接', 'bg-muted');
+      }
+    }, 5000);
   } else {
-    log(`[STOP] WS 已非 OPEN（readyState=${ws?.readyState}），跳过 end 信号`, 'err');
+    log(`[STOP] WS 已非 OPEN，跳过 end 信号`, 'err');
+    setStatus('未连接', 'bg-muted');
+    ws = null;
   }
-
-  // 释放音频资源
-  if (mediaStream)     { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
-  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
-  if (audioCtx)        { audioCtx.close(); audioCtx = null; }
-
-  finishRecording();
 }
 
 function finishRecording() {
@@ -549,6 +563,7 @@ function finishRecording() {
   updateUI(false);
   setStatus('未连接', 'bg-muted');
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    _wsCloseExpected = true;
     ws.close(1000, 'session ended');
   }
   ws = null;
@@ -562,8 +577,15 @@ function handleAsrMessage(msg) {
     return;
   }
   if (msg.final === 1) {
-    log('识别完成 ✓', 'ok');
+    log('识别完成 ✓ 触发AI查询', 'ok');
     renderTranscript();
+    // 关闭 WS
+    if (ws) {
+      _wsCloseExpected = true;
+      ws.close(1000, 'final received');
+      ws = null;
+    }
+    setStatus('未连接', 'bg-muted');
     // 自动触发知识库查询
     const question = document.getElementById('transcript-box').innerText.trim();
     if (question) queryKnowledge(question);
@@ -618,33 +640,42 @@ function renderTranscript() {
 // ─── 知识库查询 ───────────────────────────────────────────────────────────────
 async function queryKnowledge(question) {
   const cfg = getConfig();
-  if (!cfg.fnUrl) {
-    log('[KB] 未配置 Edge Function URL，跳过查询', 'info');
-    return;
-  }
-
-  log('[KB] 查询中: ' + question.slice(0, 40) + '…', 'info');
-  const section = document.getElementById('answer-section');
   const box     = document.getElementById('answer-box');
   const loading = document.getElementById('answer-loading');
 
-  section.classList.remove('hidden');
-  box.textContent = '';
+  log('[KB] ── 开始查询 ──', 'info');
+  log('[KB] 问题: ' + question, 'info');
+  log('[KB] Edge Function URL: ' + cfg.fnUrl, 'info');
+
+  if (!cfg.fnUrl) {
+    log('[KB] ❌ 未配置 Edge Function URL，跳过查询', 'err');
+    box.textContent = '未配置 Edge Function URL';
+    box.className = 'p-4 text-sm text-red-500';
+    return;
+  }
+
+  box.textContent = '查询中…';
+  box.className = 'p-4 text-sm leading-relaxed text-gray-400 italic whitespace-pre-wrap';
   loading.classList.remove('hidden');
 
   try {
+    log('[KB] 发送 fetch 请求…', 'info');
     const res = await fetch(cfg.fnUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
     });
+    log('[KB] 响应状态: ' + res.status + ' ' + res.statusText, res.ok ? 'info' : 'err');
     const data = await res.json();
+    log('[KB] 响应数据: ' + JSON.stringify(data).slice(0, 120), 'info');
     if (data.error) throw new Error(data.error);
     box.textContent = data.answer;
-    log('[KB] 回答完成（引用 ' + data.sources + ' 条知识）', 'ok');
+    box.className = 'p-4 text-sm leading-relaxed text-ink whitespace-pre-wrap';
+    log('[KB] ✓ 回答完成，引用 ' + data.sources + ' 条知识', 'ok');
   } catch (err) {
     box.textContent = '查询失败: ' + err.message;
-    log('[KB] 查询失败: ' + err.message, 'err');
+    box.className = 'p-4 text-sm text-red-500';
+    log('[KB] ❌ 查询失败: ' + err.message, 'err');
   } finally {
     loading.classList.add('hidden');
   }
