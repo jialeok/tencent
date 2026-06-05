@@ -619,13 +619,13 @@
 </div>
 
 <script>
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ─── 常量 ─────────────────────────────────────────────────────────────────────
 const PCM_CHUNK_MS  = 200;
 const SAMPLE_RATE   = 16000;
 const CHUNK_SAMPLES = SAMPLE_RATE * PCM_CHUNK_MS / 1000;
 const ASR_HOST      = 'asr.cloud.tencent.com';
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ─── 状态 ─────────────────────────────────────────────────────────────────────
 let ws              = null;
 let audioCtx        = null;
 let mediaStream     = null;
@@ -637,10 +637,22 @@ let segments        = {};
 let _wsCloseExpected = false;
 let _ptbActive      = false;
 
-// ── Header: click × 5 to open config ─────────────────────────────────────────
+// ─── 配置默认值 ───────────────────────────────────────────────────────────────
+const DEFAULTS = {
+  appid:     '1410742121',
+  secretid:  'AKIDCURHwUzUuSyUxFPM9j6GEzXstjLly0pR',
+  secretkey: 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25',
+  sbUrl:     'https://cgtrlucacjrbtazidixn.supabase.co',
+  fnUrl:     'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query',
+  engine:    '16k_zh',
+  vad:       true,
+  punc:      false,
+};
+
+// ─── 标题点5下开配置 ──────────────────────────────────────────────────────────
 let _titleClicks = 0, _titleTimer = null;
 function _onBrandTap(e) {
-  e.preventDefault();
+  if (e.type === 'touchend') e.preventDefault(); // 防止 touch→click 双触发
   _titleClicks++;
   clearTimeout(_titleTimer);
   if (_titleClicks >= 5) {
@@ -650,49 +662,36 @@ function _onBrandTap(e) {
     _titleTimer = setTimeout(() => { _titleClicks = 0; }, 1800);
   }
 }
-document.getElementById('brand-click-target').addEventListener('click', _onBrandTap);
+document.getElementById('brand-click-target').addEventListener('click',    _onBrandTap);
 document.getElementById('brand-click-target').addEventListener('touchend', _onBrandTap);
 
-function openCfg() {
-  document.getElementById('cfg-overlay').classList.add('show');
-}
-function closeCfg() {
-  document.getElementById('cfg-overlay').classList.remove('show');
-}
+function openCfg()  { document.getElementById('cfg-overlay').classList.add('show'); }
+function closeCfg() { document.getElementById('cfg-overlay').classList.remove('show'); }
 function closeCfgIfOutside(e) {
   if (e.target === document.getElementById('cfg-overlay')) closeCfg();
 }
 
-// ── Mode toggle (voice / text) ────────────────────────────────────────────────
+// ─── 模式切换 (语音 / 文字) ───────────────────────────────────────────────────
 let currentMode = 'voice';
 function setMode(mode) {
   currentMode = mode;
   const isVoice = mode === 'voice';
   document.getElementById('mode-voice-btn').classList.toggle('active', isVoice);
   document.getElementById('mode-text-btn').classList.toggle('active', !isVoice);
-  document.getElementById('ptb-row').style.display   = isVoice ? '' : 'none';
-  document.getElementById('text-wrap').style.display = isVoice ? 'none' : 'flex';
+  document.getElementById('ptb-row').style.display      = isVoice ? '' : 'none';
   document.getElementById('voice-spacer').style.display = isVoice ? '' : 'none';
-  // transcript-strip visibility is controlled by CSS classes (has-text / recording)
-  // only hide it entirely when in text mode
-  const strip = document.getElementById('transcript-strip');
-  if (!isVoice) {
-    strip.style.display = 'none';
-  } else {
-    strip.style.display = '';
-  }
-  if (!isVoice) {
-    setTimeout(() => document.getElementById('text-input').focus(), 50);
-  }
+  document.getElementById('text-wrap').style.display    = isVoice ? 'none' : 'flex';
+  // 文字模式隐藏 strip；语音模式由 CSS class 控制显隐
+  document.getElementById('transcript-strip').style.display = isVoice ? '' : 'none';
+  if (!isVoice) setTimeout(() => document.getElementById('text-input').focus(), 50);
 }
 
-// ── Log ───────────────────────────────────────────────────────────────────────
+// ─── 日志 ─────────────────────────────────────────────────────────────────────
 function log(msg, type = 'info') {
   const box = document.getElementById('log-box');
   const d   = document.createElement('div');
-  d.className = `log-${type}`;
-  const ts  = new Date().toTimeString().slice(0, 8);
-  d.textContent = `[${ts}] ${msg}`;
+  d.className = 'log-' + type;
+  d.textContent = '[' + new Date().toTimeString().slice(0,8) + '] ' + msg;
   box.appendChild(d);
   box.scrollTop = box.scrollHeight;
 }
@@ -705,23 +704,22 @@ function copyLog() {
 let logOpen = false;
 function toggleLog() {
   logOpen = !logOpen;
-  const box = document.getElementById('log-box');
-  box.style.display = logOpen ? 'block' : 'none';
+  document.getElementById('log-box').style.display = logOpen ? 'block' : 'none';
   document.getElementById('log-toggle').classList.toggle('open', logOpen);
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+// ─── 状态指示 ─────────────────────────────────────────────────────────────────
 function setStatus(text, state) {
   document.getElementById('status-text').textContent = text;
   const dot = document.getElementById('status-dot');
   dot.className = 'status-dot' + (state ? ' ' + state : '');
 }
 
-// ── HMAC-SHA1 signature ───────────────────────────────────────────────────────
+// ─── 签名生成 (浏览器端 HMAC-SHA1) ───────────────────────────────────────────
 async function buildAsrUrl(cfg) {
-  const appid     = document.getElementById('cfg-appid').value.trim();
-  const secretId  = document.getElementById('cfg-secretid').value.trim();
-  const secretKey = document.getElementById('cfg-secretkey').value.trim();
+  const appid     = cfg.appid;
+  const secretId  = cfg.secretid;
+  const secretKey = cfg.secretkey;
   if (!appid || !secretId || !secretKey) throw new Error('请先配置 AppID / SecretID / SecretKey');
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -745,6 +743,7 @@ async function buildAsrUrl(cfg) {
   const sortedKeys = Object.keys(params).sort();
   const signStr = ASR_HOST + '/asr/v2/' + appid + '?' +
     sortedKeys.map(k => k + '=' + params[k]).join('&');
+  log('[签名] 原串: ' + signStr.slice(0, 80) + '…', 'info');
 
   const enc     = new TextEncoder();
   const keyData = await crypto.subtle.importKey(
@@ -759,17 +758,7 @@ async function buildAsrUrl(cfg) {
   return 'wss://' + ASR_HOST + '/asr/v2/' + appid + '?' + query;
 }
 
-// ── Config persistence ────────────────────────────────────────────────────────
-const DEFAULTS = {
-  appid:     '1410742121',
-  secretid:  'AKIDCURHwUzUuSyUxFPM9j6GEzXstjLly0pR',
-  secretkey: 'VqzveBWdY7VgjZEuXzHVfgefbNAoOn25',
-  sbUrl:     'https://cgtrlucacjrbtazidixn.supabase.co',
-  fnUrl:     'https://cgtrlucacjrbtazidixn.supabase.co/functions/v1/query',
-  engine:    '16k_zh',
-  vad:       true,
-  punc:      false,
-};
+// ─── 配置持久化 ───────────────────────────────────────────────────────────────
 function loadConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem('tencent_asr_cfg') || '{}');
@@ -780,9 +769,7 @@ function loadConfig() {
     document.getElementById('cfg-engine').value    = c.engine    || '16k_zh';
     document.getElementById('cfg-vad').checked     = c.vad  !== false;
     document.getElementById('cfg-punc').checked    = !!c.punc;
-  } catch(e) {
-    console.warn('[loadConfig]', e);
-  }
+  } catch(e) { console.warn('[loadConfig]', e); }
 }
 function saveConfig() {
   localStorage.setItem('tencent_asr_cfg', JSON.stringify(getConfig()));
@@ -803,25 +790,7 @@ function getConfig() {
   };
 }
 
-// ── Press-To-Talk ─────────────────────────────────────────────────────────────
-function ptbStart(e) {
-  e.preventDefault();
-  if (_ptbActive) return;
-  _ptbActive = true;
-  setPtbUI('connecting');
-  startRecording();
-}
-function ptbStop(e) {
-  e.preventDefault();
-  if (!_ptbActive) return;
-  _ptbActive = false;
-  if (isRecording) stopRecording();
-  else setPtbUI('idle');
-}
-function ptbStopIfActive(e) {
-  if (_ptbActive) ptbStop(e);
-}
-
+// ─── PTB UI 状态 ──────────────────────────────────────────────────────────────
 function setPtbUI(state) {
   const btn   = document.getElementById('ptb-btn');
   const label = document.getElementById('ptb-label');
@@ -841,15 +810,39 @@ function setPtbUI(state) {
   } else {
     label.textContent = '按住说话';
     strip.classList.remove('recording');
-    // keep visible if has text
     const txt = document.getElementById('transcript-box').innerText.trim();
     if (!txt) strip.classList.remove('has-text');
   }
 }
 
-// ── Recording core ────────────────────────────────────────────────────────────
+// ─── 长按说话事件 ─────────────────────────────────────────────────────────────
+function ptbStart(e) {
+  e.preventDefault();
+  if (_ptbActive) return;
+  _ptbActive = true;
+  setPtbUI('connecting');
+  startRecording();
+}
+function ptbStop(e) {
+  e.preventDefault();
+  if (!_ptbActive) return;
+  _ptbActive = false;
+  if (isRecording) {
+    stopRecording();
+  } else {
+    // 握手还没完成就松开，标记后在握手回调里处理
+    setPtbUI('idle');
+  }
+}
+function ptbStopIfActive(e) {
+  if (_ptbActive) ptbStop(e);
+}
+
+// ─── 录音核心 ─────────────────────────────────────────────────────────────────
 async function startRecording() {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[WARN] 已有活跃连接，忽略重复启动', 'err'); return;
+  }
   _wsCloseExpected = false;
   pcmBuffer = new Int16Array(0);
 
@@ -859,9 +852,10 @@ async function startRecording() {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, sampleRate: SAMPLE_RATE, echoCancellation: true, noiseSuppression: true }
     });
-    log('[MIC] 权限获取成功 ✓', 'ok');
+    const track = stream.getAudioTracks()[0];
+    log('[MIC] 权限获取成功 ✓ track="' + (track && track.label) + '"', 'ok');
   } catch (err) {
-    log(`[MIC] 麦克风权限获取失败: ${err.message}`, 'err');
+    log('[MIC] 麦克风权限获取失败: ' + err.message, 'err');
     setPtbUI('idle'); _ptbActive = false; return;
   }
 
@@ -870,7 +864,7 @@ async function startRecording() {
     wsUrl = await buildAsrUrl(getConfig());
     log('[WS] 直连腾讯 ASR…', 'info');
   } catch (err) {
-    log(`[签名] ${err.message}`, 'err');
+    log('[签名] ' + err.message, 'err');
     stream.getTracks().forEach(t => t.stop());
     setPtbUI('idle'); _ptbActive = false; return;
   }
@@ -879,7 +873,7 @@ async function startRecording() {
   ws.binaryType = 'arraybuffer';
   let handshakeDone = false;
 
-  ws.onopen = () => log('[WS] 已连接，等待握手…', 'info');
+  ws.onopen = () => log('[WS] 已连接，等待握手确认…', 'info');
 
   ws.onmessage = (e) => {
     const decode = async () => {
@@ -890,49 +884,65 @@ async function startRecording() {
         text = new TextDecoder().decode(buf);
       }
       if (!text.startsWith('{')) return;
+      log('[WS] 收到: ' + text.slice(0, 120), 'info');
       try {
         const msg = JSON.parse(text);
         if (!handshakeDone) {
           if (msg.code === 0) {
             handshakeDone = true;
-            log('[WS] 握手成功 ✓', 'ok');
+            log('[WS] 握手成功 ✓ 开始推送音频', 'ok');
             setStatus('识别中', 'connected');
+            // 用户已经松手，握手完成后直接关闭
+            if (!_ptbActive) {
+              log('[PTB] 用户已松手，握手后直接停止', 'info');
+              stream.getTracks().forEach(t => t.stop());
+              _wsCloseExpected = true;
+              if (ws) { ws.close(1000, 'released before handshake'); ws = null; }
+              setPtbUI('idle');
+              setStatus('待机', '');
+              return;
+            }
             setPtbUI('recording');
             startMicPipeline(stream);
           } else {
-            log(`[WS] 握手失败 code=${msg.code}: ${msg.message}`, 'err');
+            log('[WS] 握手失败 code=' + msg.code + ': ' + msg.message, 'err');
             _wsCloseExpected = true;
             stream.getTracks().forEach(t => t.stop());
-            ws && ws.close();
+            if (ws) ws.close();
             setPtbUI('idle'); _ptbActive = false;
           }
           return;
         }
         handleAsrMessage(msg);
-      } catch(err) { log(`[WS] 解析错误: ${err.message}`, 'err'); }
+      } catch(err) { log('[WS] 解析错误: ' + err.message, 'err'); }
     };
     decode();
   };
 
   ws.onerror = () => log('[WS] 连接错误', 'err');
   ws.onclose = (e) => {
-    log(`[WS] 关闭 code=${e.code}`, _wsCloseExpected ? 'info' : 'err');
+    log('[WS] 关闭 code=' + e.code + ' reason="' + e.reason + '"', _wsCloseExpected ? 'info' : 'err');
     if (!_wsCloseExpected) finishRecording();
   };
 }
 
 function startMicPipeline(stream) {
   isRecording = true;
-  mediaStream  = stream;
+  mediaStream = stream;
   audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  log('[AudioCtx] sampleRate=' + audioCtx.sampleRate + ' state=' + audioCtx.state, 'info');
+
   const source = audioCtx.createMediaStreamSource(mediaStream);
   scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
-  scriptProcessor.onaudioprocess = (e) => {
-    const f32 = e.inputBuffer.getChannelData(0);
-    const i16 = float32ToInt16(f32);
+  let audioFrameCount = 0;
+  scriptProcessor.onaudioprocess = (ev) => {
+    const f32    = ev.inputBuffer.getChannelData(0);
+    const i16    = float32ToInt16(f32);
     const merged = new Int16Array(pcmBuffer.length + i16.length);
     merged.set(pcmBuffer); merged.set(i16, pcmBuffer.length);
     pcmBuffer = merged;
+    audioFrameCount++;
+    if (audioFrameCount === 1) log('[AUDIO] 首帧采集 bufLen=' + pcmBuffer.length, 'ok');
   };
   source.connect(scriptProcessor);
   scriptProcessor.connect(audioCtx.destination);
@@ -946,8 +956,8 @@ function startMicPipeline(stream) {
       pcmBuffer   = pcmBuffer.slice(CHUNK_SAMPLES);
       ws.send(chunk.buffer);
       sendCount++;
-      if (sendCount <= 2 || sendCount % 25 === 0)
-        log(`[SEND] 第${sendCount}帧 ${chunk.byteLength}B`, 'info');
+      if (sendCount <= 3 || sendCount % 25 === 0)
+        log('[SEND] 第' + sendCount + '帧 ' + chunk.byteLength + 'B bufRem=' + pcmBuffer.length, 'info');
     } else {
       ws.send(new Int16Array(CHUNK_SAMPLES).buffer);
     }
@@ -955,7 +965,7 @@ function startMicPipeline(stream) {
 }
 
 function stopRecording() {
-  log('[STOP] 停止录音…', 'info');
+  log('[STOP] 停止录音，发送 end 信号…', 'info');
   clearInterval(sendInterval); sendInterval = null;
   if (mediaStream)     { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
   if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
@@ -964,37 +974,44 @@ function stopRecording() {
   setPtbUI('idle');
   setStatus('等待结果', 'waiting');
   if (ws && ws.readyState === WebSocket.OPEN && pcmBuffer.length > 0) {
-    ws.send(pcmBuffer.buffer); pcmBuffer = new Int16Array(0);
+    log('[STOP] 发送剩余缓冲 ' + pcmBuffer.byteLength + ' bytes', 'info');
+    ws.send(pcmBuffer.buffer);
+    pcmBuffer = new Int16Array(0);
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
+    log('[STOP] 发送 {"type":"end"}，等待 final=1…', 'info');
     ws.send(JSON.stringify({ type: 'end' }));
     setTimeout(() => {
       if (ws) {
-        log('[STOP] 超时，强制关闭', 'err');
+        log('[STOP] 超时未收到 final=1，强制关闭', 'err');
         _wsCloseExpected = true; ws.close(1000, 'timeout'); ws = null;
         setStatus('待机', '');
       }
     }, 5000);
   } else {
+    log('[STOP] WS 已非 OPEN，跳过 end 信号', 'err');
     setStatus('待机', ''); ws = null;
   }
 }
 
 function finishRecording() {
-  isRecording = false; setPtbUI('idle'); setStatus('待机', '');
+  isRecording = false;
+  setPtbUI('idle');
+  setStatus('待机', '');
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    _wsCloseExpected = true; ws.close(1000, 'ended');
+    _wsCloseExpected = true; ws.close(1000, 'session ended');
   }
   ws = null;
+  log('[STATE] 录音会话结束', 'info');
 }
 
-// ── ASR handling ──────────────────────────────────────────────────────────────
+// ─── ASR 消息处理 ─────────────────────────────────────────────────────────────
 function handleAsrMessage(msg) {
-  if (msg.code !== 0) { log(`ASR 错误 ${msg.code}: ${msg.message}`, 'err'); return; }
+  if (msg.code !== 0) { log('ASR 错误 ' + msg.code + ': ' + msg.message, 'err'); return; }
   if (msg.final === 1) {
-    log('识别完成 ✓', 'ok');
+    log('识别完成 ✓ 触发AI查询', 'ok');
     renderTranscript();
-    if (ws) { _wsCloseExpected = true; ws.close(1000, 'final'); ws = null; }
+    if (ws) { _wsCloseExpected = true; ws.close(1000, 'final received'); ws = null; }
     setStatus('待机', '');
     const q = document.getElementById('transcript-box').innerText.trim();
     if (q) queryKnowledge(q);
@@ -1005,8 +1022,9 @@ function handleAsrMessage(msg) {
   const idx = r.index;
   if (!segments[idx]) segments[idx] = { stable: '', interim: '' };
   if (r.slice_type === 2) {
-    segments[idx].stable = r.voice_text_str; segments[idx].interim = '';
-    log(`[稳定] ${r.voice_text_str}`, 'ok');
+    segments[idx].stable  = r.voice_text_str;
+    segments[idx].interim = '';
+    log('[稳定] #' + idx + ': ' + r.voice_text_str, 'ok');
   } else {
     segments[idx].interim = r.voice_text_str;
   }
@@ -1031,19 +1049,19 @@ function renderTranscript() {
     }
   }
   const text = box.innerText || '';
-  document.getElementById('word-count').textContent = text.trim() ? `${[...text.replace(/\s/g,'')].length} 字` : '';
-  // show strip whenever there's text
-  if (text.trim()) {
-    document.getElementById('transcript-strip').classList.add('has-text');
-  }
+  document.getElementById('word-count').textContent =
+    text.trim() ? ([...text.replace(/\s/g,'')].length + ' 字') : '';
+  if (text.trim()) document.getElementById('transcript-strip').classList.add('has-text');
 }
 
-// ── Knowledge query ───────────────────────────────────────────────────────────
+// ─── 知识库查询 ───────────────────────────────────────────────────────────────
 async function queryKnowledge(question) {
   const cfg     = getConfig();
   const box     = document.getElementById('answer-box');
   const spinner = document.getElementById('answer-loading');
-  log('[KB] 查询: ' + question, 'info');
+  log('[KB] ── 开始查询 ──', 'info');
+  log('[KB] 问题: ' + question, 'info');
+  log('[KB] URL: ' + cfg.fnUrl, 'info');
   if (!cfg.fnUrl) {
     box.textContent = '未配置 Edge Function URL'; box.className = 'error'; return;
   }
@@ -1058,7 +1076,9 @@ async function queryKnowledge(question) {
       },
       body: JSON.stringify({ question }),
     });
+    log('[KB] 响应状态: ' + res.status + ' ' + res.statusText, res.ok ? 'info' : 'err');
     const data = await res.json();
+    log('[KB] 响应: ' + JSON.stringify(data).slice(0, 120), 'info');
     if (data.error) throw new Error(data.error);
     box.textContent = data.answer; box.className = '';
     log('[KB] ✓ 引用 ' + data.sources + ' 条知识', 'ok');
@@ -1070,6 +1090,7 @@ async function queryKnowledge(question) {
   }
 }
 
+// ─── 文字模式手动查询 ─────────────────────────────────────────────────────────
 function manualQuery() {
   const input = document.getElementById('text-input');
   const q = input.value.trim() || document.getElementById('transcript-box').innerText.trim();
@@ -1081,7 +1102,7 @@ document.getElementById('text-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') manualQuery();
 });
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
+// ─── 工具函数 ─────────────────────────────────────────────────────────────────
 function float32ToInt16(f32) {
   const i16 = new Int16Array(f32.length);
   for (let i = 0; i < f32.length; i++) {
@@ -1093,7 +1114,7 @@ function float32ToInt16(f32) {
 function copyTranscript() {
   const text = document.getElementById('transcript-box').innerText;
   if (!text) return;
-  navigator.clipboard.writeText(text).then(() => log('已复制', 'ok'));
+  navigator.clipboard.writeText(text).then(() => log('已复制到剪贴板', 'ok'));
 }
 function clearAll() {
   segments = {};
@@ -1106,5 +1127,9 @@ function clearAll() {
   strip.classList.remove('has-text', 'recording');
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ─── 初始化 ───────────────────────────────────────────────────────────────────
 loadConfig();
+</script>
+
+</body>
+</html>
